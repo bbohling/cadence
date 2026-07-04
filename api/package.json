@@ -1,0 +1,31 @@
+{
+  "name": "cadence-api",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "bun src/db/migrate.ts",
+    "db:studio": "drizzle-kit studio",
+    "jobs:sync": "bun src/jobs/sync-cron.ts",
+    "jobs:normalize": "bun src/jobs/normalize.ts",
+    "jobs:bulk-sync": "bun src/jobs/bulk-sync.ts",
+    "jobs:kom-refresh": "bun src/jobs/kom-refresh-cron.ts"
+  },
+  "dependencies": {
+    "hono": "latest",
+    "drizzle-orm": "latest",
+    "zod": "latest",
+    "cron": "latest",
+    "date-fns": "latest",
+    "date-fns-tz": "latest",
+    "nanoid": "latest"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/cron": "latest",
+    "drizzle-kit": "latest",
+    "typescript": "latest"
+  }
+}

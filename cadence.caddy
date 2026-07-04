@@ -1,0 +1,25 @@
+# Cadence (cadence.brndn.me) — Caddy site configuration
+#
+# This file is symlinked into /etc/caddy/sites/ and imported by the
+# main Caddyfile via: import /etc/caddy/sites/*.caddy
+#
+# Prerequisites: The main Caddyfile must define these snippets:
+#   (api_proxy), (spa_site), (asset_cache), (spa_security_headers)
+#
+# Setup:
+#   ln -s /usr/share/nginx/cadence/cadence.caddy /etc/caddy/sites/cadence.caddy
+#   caddy validate --config /etc/caddy/Caddyfile && sudo caddy reload
+
+cadence.brndn.me {
+	# --- API with prefix stripping ---
+	handle_path /api* {
+		import api_proxy
+		reverse_proxy 127.0.0.1:3033
+	}
+
+	# --- UI (React SPA) ---
+	handle {
+		root * /usr/share/nginx/cadence/ui/dist
+		import spa_site
+	}
+}
