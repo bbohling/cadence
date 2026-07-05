@@ -1,28 +1,45 @@
 # cadence
 
-A personal cycling dashboard powered by Strava data. Built with Bun, Hono, React, and Drizzle.
+A personal cycling dashboard powered by Strava data. Built with Hono, React,
+and Drizzle, deployed on Cloudflare (Workers + D1 + Pages).
+
+**Live:** https://cadence.bbohling.com (UI) · https://cadence.bbohling.com/api/health (API)
 
 ## Architecture
 
 ```
-cadence-bun/
-├── api/                  # Hono API (Bun runtime)
+cadence/
+├── api/                  # Hono API — Cloudflare Worker
 │   ├── src/
-│   │   ├── db/           # Drizzle schema + SQLite connection
+│   │   ├── db/           # Drizzle schema + D1 connection
 │   │   ├── routes/       # Hono route handlers
 │   │   ├── services/     # Business logic (sync, normalize, reports)
-│   │   ├── jobs/         # Cron + standalone scripts
+│   │   ├── jobs/         # Local-only scripts (bulk sync, prod migration)
 │   │   └── utils/        # Config, logging, unit conversions
-│   └── drizzle/          # Generated migrations
-├── ui/                   # React dashboard (Vite + Tailwind)
+│   ├── drizzle/          # Generated migrations
+│   └── wrangler.jsonc    # Worker config: D1 binding, cron triggers, route
+├── ui/                   # React dashboard (Vite + Tailwind) — Cloudflare Pages
 │   └── src/
 │       ├── routes/       # TanStack Router pages
 │       ├── components/   # Dashboard components
 │       ├── hooks/        # React hooks
 │       └── lib/          # API client, utilities
-├── ecosystem.config.cjs  # PM2 configuration
-└── Caddyfile.example     # Caddy reverse proxy config
+└── .github/workflows/    # CI/CD: push to main → deploy Worker + Pages
 ```
+
+### Hosting layout
+
+One hostname, two services. DNS for `cadence.bbohling.com` points at the
+Pages project (UI). A Worker **zone route** (`cadence.bbohling.com/api/*`)
+intercepts API paths before they reach Pages, so UI and API are same-origin
+(no CORS in production). The Worker also answers on
+`cadence-api.bbohling.workers.dev` (bare paths, no `/api` prefix) and runs
+the scheduled jobs via Cron Triggers:
+
+- `5 * * * *` (UTC) — hourly Strava sync + normalization
+- `0 12 * * *` (UTC) — daily KOM current-rankings refresh (4 AM PST / 5 AM PDT)
+
+Data lives in **D1** (serverless SQLite), database name `cadence`.
 
 ## Data Flow
 
@@ -59,6 +76,7 @@ is frozen at the time each activity was synced.
 
 ### Prerequisites
 - [Bun](https://bun.sh) v1.1+
+- Wrangler (installed as an api/ dev dependency; authenticate with `npx wrangler login`)
 - Strava API credentials ([create an app](https://www.strava.com/settings/api))
 
 ### Setup
@@ -66,11 +84,11 @@ is frozen at the time each activity was synced.
 ```bash
 # API
 cd api
-cp .env.example .env        # Edit with your Strava credentials
 bun install
-mkdir -p data
-bun run db:generate          # Generate migration SQL
-bun run db:migrate           # Create tables
+# Local secrets for `wrangler dev` (gitignored):
+printf "STRAVA_CLIENT_ID=...\nSTRAVA_CLIENT_SECRET=...\n" > .dev.vars
+# Seed the local D1 replica (from a dump — see Data Operations below)
+npx wrangler d1 execute cadence --local --file <dump.sql>
 
 # UI
 cd ../ui
@@ -80,71 +98,69 @@ bun install
 ### Development
 
 ```bash
-# Terminal 1: API
-cd api && bun run dev        # http://localhost:3033
+# Terminal 1: API (wrangler dev, local D1 replica)
+cd api && bun run dev        # http://localhost:8787
 
 # Terminal 2: UI
-cd ui && bun run dev         # http://localhost:5173
-
-# Terminal 3 (optional): Sync cron
-cd api && bun src/jobs/sync-cron.ts
-
-# Terminal 4 (optional): KOM refresh cron
-cd api && bun src/jobs/kom-refresh-cron.ts
+cd ui && bun run dev         # http://localhost:5173 (proxies /api)
 ```
 
-### Manual Operations
+To exercise the cron handlers locally:
 
 ```bash
-# Trigger a one-time sync
-cd api && bun src/jobs/sync-cron.ts --once
-
-# Run normalization
-cd api && bun src/jobs/normalize.ts
-cd api && bun src/jobs/normalize.ts --force    # Re-normalize all
-
-# Refresh current KOM rankings (one-time)
-cd api && bun src/jobs/kom-refresh-cron.ts --once
-
-# Start a bulk historical sync
-curl -X POST http://localhost:3033/v1/sync/bulk/brandon/start
-
-# Check bulk sync status
-curl http://localhost:3033/v1/sync/bulk/brandon/status
-
-# Trigger KOM refresh via API
-curl -X POST http://localhost:3033/v1/koms/brandon/current/refresh
+cd api && npx wrangler dev --test-scheduled
+curl "http://localhost:8787/cdn-cgi/handler/scheduled?cron=5+*+*+*+*"   # hourly sync
+curl "http://localhost:8787/cdn-cgi/handler/scheduled?cron=0+12+*+*+*"  # KOM refresh
 ```
 
-## Production Deployment (DigitalOcean + Caddy + PM2)
+## Deployment (CI/CD)
 
-### 1. Build the UI
+Push to `main` deploys automatically via GitHub Actions:
+
+- `api/**` changes → typecheck + `wrangler deploy` (Worker, crons, route)
+- `ui/**` changes → Vite build (`VITE_API_URL=/api`) + `wrangler pages deploy`
+
+Required repo secrets (Settings → Secrets and variables → Actions):
+
+| Secret | Value |
+|---|---|
+| `CLOUDFLARE_API_TOKEN` | Token with: Account → Workers Scripts:Edit, Cloudflare Pages:Edit, D1:Edit; Zone (bbohling.com) → Workers Routes:Edit |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account ID (dashboard sidebar or `npx wrangler whoami`) |
+
+Manual deploys: `cd api && bun run deploy` and
+`cd ui && VITE_API_URL=/api bun run build && npx wrangler pages deploy dist --project-name=cadence --branch=main`.
+
+Worker runtime secrets (Strava credentials) are NOT in CI — they're set once
+via `wrangler secret put STRAVA_CLIENT_ID` / `STRAVA_CLIENT_SECRET` and
+persist across deploys.
+
+## Data Operations
 
 ```bash
-cd ui
-VITE_API_URL=https://yourdomain.com/api bun run build
+# Query production D1
+cd api && npx wrangler d1 execute cadence --remote --command "SELECT COUNT(*) FROM activities"
+
+# Export production D1 (backup)
+npx wrangler d1 export cadence --remote --output backup.sql
+
+# Trigger an incremental sync by hand
+curl -X POST https://cadence.bbohling.com/api/v1/sync/brandon
+
+# Trigger KOM refresh by hand
+curl -X POST https://cadence.bbohling.com/api/v1/koms/brandon/current/refresh
 ```
 
-### 2. Configure PM2
-
-```bash
-# From the cadence-bun root
-mkdir -p logs
-pm2 start ecosystem.config.cjs
-pm2 save
-pm2 startup    # Auto-start on reboot
-```
-
-### 3. Configure Caddy
-
-Copy `Caddyfile.example` to your Caddy config directory, update the domain
-and file paths, then reload Caddy:
-
-```bash
-caddy reload --config /etc/caddy/Caddyfile
-```
+**Bulk historical sync: local only.** Never call `/v1/sync/bulk/*` against
+the deployed Worker — free-tier Workers allow 50 subrequests per invocation
+and a bulk sync makes one request per activity. Run backfills locally
+(`wrangler dev` + local D1, or the `main` branch's Bun/SQLite setup), then
+import the data into remote D1 (see `DEPLOY-CLOUDFLARE.md` for the
+statement-size-aware dump procedure).
 
 ## API Endpoints
+
+On `cadence.bbohling.com` all paths below are prefixed with `/api`
+(e.g. `/api/v1/koms/brandon/stats`); on `workers.dev` they're bare.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -162,7 +178,7 @@ caddy reload --config /etc/caddy/Caddyfile
 | GET | `/v1/koms/:userId/current` | Ranked segments — current (paginated) |
 | POST | `/v1/koms/:userId/current/refresh` | Trigger KOM refresh from Strava |
 | POST | `/v1/sync/:userId` | Trigger incremental sync |
-| POST | `/v1/sync/bulk/:userId/start` | Start bulk sync |
+| POST | `/v1/sync/bulk/:userId/start` | Start bulk sync (LOCAL DEV ONLY) |
 | GET | `/v1/sync/bulk/:userId/status` | Bulk sync status |
 | DELETE | `/v1/sync/bulk/:userId/reset` | Reset bulk sync |
 | POST | `/v1/sync/normalize` | Trigger normalization |
@@ -172,13 +188,21 @@ caddy reload --config /etc/caddy/Caddyfile
 
 | Layer | Technology | Why |
 |-------|-----------|-----|
-| Runtime | Bun | Fast startup, native TS, built-in SQLite |
-| API | Hono | Lightweight, fast, great DX |
-| Database | SQLite + Drizzle | Zero-ops, type-safe, fast reads |
+| API runtime | Cloudflare Workers | Zero servers, zero patching, free tier |
+| API framework | Hono | Workers-native, lightweight, great DX |
+| Database | Cloudflare D1 + Drizzle | Serverless SQLite, type-safe queries |
+| Scheduled jobs | Workers Cron Triggers | Replaces PM2 cron processes |
+| UI hosting | Cloudflare Pages | Git-push deploys, free, global CDN |
 | UI | React + Vite | Industry standard, great tooling |
 | Routing | TanStack Router | Type-safe, file-based |
 | Data Fetching | TanStack Query | Caching, refetching, loading states |
 | Styling | Tailwind CSS v4 | Utility-first, responsive, fast |
 | Charts | Recharts | React-native, responsive, declarative |
-| Process Manager | PM2 | Production process management |
-| Reverse Proxy | Caddy | Auto-HTTPS, simple config |
+| CI/CD | GitHub Actions + wrangler-action | Push to main = deploy |
+| Local tooling | Bun | Fast installs, native TS for local scripts |
+
+## History
+
+The droplet deployment (Bun + PM2 + Caddy + SQLite on DigitalOcean) lives on
+the `main` branch history prior to the Cloudflare migration. The one-time
+migration steps are recorded in `DEPLOY-CLOUDFLARE.md`.

@@ -73,7 +73,7 @@ export async function refreshCurrentKoms(userId: string): Promise<KomRefreshResu
   const start = Date.now();
 
   try {
-    const user = db.select().from(users).where(eq(users.name, userId)).get();
+    const user = await db.select().from(users).where(eq(users.name, userId)).get();
     if (!user) throw new Error(`User not found: ${userId}`);
     if (!user.athleteId) throw new Error(`User has no athlete ID: ${userId}`);
 
@@ -82,12 +82,12 @@ export async function refreshCurrentKoms(userId: string): Promise<KomRefreshResu
     const timestamp = now();
 
     // Count previous KOMs for change tracking
-    const previousCount = db.all<{ count: number }>(sql`
+    const previousCount = (await db.all<{ count: number }>(sql`
       SELECT COUNT(*) AS count
       FROM segment_current_ranks
       WHERE athlete_id = ${athleteId}
         AND current_rank = 1
-    `)[0]?.count ?? 0;
+    `))[0]?.count ?? 0;
 
     // ── Fetch current KOMs from /athletes/{id}/koms ─────────────
 
@@ -111,18 +111,18 @@ export async function refreshCurrentKoms(userId: string): Promise<KomRefreshResu
     // Any segment_current_ranks row with rank=1 that wasn't in this
     // refresh means the athlete lost that KOM.
 
-    const lostResult = db.all<{ count: number }>(sql`
+    const lostResult = (await db.all<{ count: number }>(sql`
       SELECT COUNT(*) AS count
       FROM segment_current_ranks
       WHERE athlete_id = ${athleteId}
         AND current_rank IS NOT NULL
         AND checked_at < ${timestamp}
-    `)[0];
+    `))[0];
 
     const lost = lostResult?.count ?? 0;
 
     if (lost > 0) {
-      db.run(sql`
+      await db.run(sql`
         UPDATE segment_current_ranks
         SET
           previous_rank = current_rank,
@@ -183,14 +183,14 @@ async function fetchAllKomPages(
  * Stores the previous rank for change tracking and updates all
  * denormalized fields.
  */
-function upsertKom(
+async function upsertKom(
   effort: StravaSegmentEffort,
   athleteId: number,
   timestamp: string
-): void {
+): Promise<void> {
   const segmentId = effort.segment.id;
 
-  const existing = db
+  const existing = await db
     .select({ currentRank: segmentCurrentRanks.currentRank })
     .from(segmentCurrentRanks)
     .where(eq(segmentCurrentRanks.segmentId, segmentId))
@@ -213,12 +213,12 @@ function upsertKom(
   };
 
   if (existing !== undefined) {
-    db.update(segmentCurrentRanks)
+    await db.update(segmentCurrentRanks)
       .set(values)
       .where(eq(segmentCurrentRanks.segmentId, segmentId))
       .run();
   } else {
-    db.insert(segmentCurrentRanks)
+    await db.insert(segmentCurrentRanks)
       .values({ ...values, createdAt: timestamp })
       .run();
   }

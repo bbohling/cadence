@@ -82,8 +82,8 @@ export interface KomAchievement {
  * Returns one row per year with aggregate totals for rides,
  * distance, elevation, calories, and moving time.
  */
-export function getYearlyStats(athleteId: number): YearlyStats[] {
-  const rows = db.all<{
+export async function getYearlyStats(athleteId: number): Promise<YearlyStats[]> {
+  const rows = await db.all<{
     year: number;
     total_rides: number;
     total_distance: number;
@@ -136,19 +136,19 @@ export function getYearlyStats(athleteId: number): YearlyStats[] {
  * Returns stats for both years through today's month/day,
  * so the comparison is fair (apples to apples).
  */
-export function getYearOverYearProgress(athleteId: number): YearProgress[] {
+export async function getYearOverYearProgress(athleteId: number): Promise<YearProgress[]> {
   const currentYear = new Date().getFullYear();
   const mmdd = new Date().toISOString().slice(5, 10); // "02-15"
 
   const years = [currentYear, currentYear - 1];
 
-  return years.map((year) => {
+  return Promise.all(years.map(async (year) => {
     const startOfYear = `${year}-01-01T00:00:00Z`;
     const throughDate = `${year}-${mmdd}T23:59:59Z`;
 
-    // NOTE: db.all() returns objects with named keys; db.get() returns
+    // NOTE: await db.all() returns objects with named keys; await db.get() returns
     // an array of values (Drizzle bun-sqlite quirk), so we use all()[0].
-    const row = db.all<{
+    const row = (await db.all<{
       rides: number;
       distance: number;
       elevation: number;
@@ -166,7 +166,7 @@ export function getYearOverYearProgress(athleteId: number): YearProgress[] {
         AND type IN ('Ride', 'VirtualRide')
         AND start_date >= ${startOfYear}
         AND start_date <= ${throughDate}
-    `)[0];
+    `))[0];
 
     return {
       year,
@@ -177,7 +177,7 @@ export function getYearOverYearProgress(athleteId: number): YearProgress[] {
       calories: row?.calories ?? 0,
       movingTime: row?.moving_time ?? 0,
     };
-  });
+  }));
 }
 
 // ── Gear Usage ─────────────────────────────────────────
@@ -188,8 +188,8 @@ export function getYearOverYearProgress(athleteId: number): YearProgress[] {
  * Joins gear metadata with activity aggregates so we can show
  * total distance, rides, etc. per bike/shoe.
  */
-export function getGearUsage(athleteId: number): GearUsage[] {
-  const rows = db.all<{
+export async function getGearUsage(athleteId: number): Promise<GearUsage[]> {
+  const rows = await db.all<{
     id: string;
     name: string;
     brand_name: string | null;
@@ -235,8 +235,8 @@ export function getGearUsage(athleteId: number): GearUsage[] {
 /**
  * Get activity counts and totals grouped by activity type.
  */
-export function getActivityTypeBreakdown(athleteId: number): ActivityTypeBreakdown[] {
-  const rows = db.all<{
+export async function getActivityTypeBreakdown(athleteId: number): Promise<ActivityTypeBreakdown[]> {
+  const rows = await db.all<{
     type: string;
     count: number;
     total_distance: number;
@@ -274,19 +274,19 @@ export function getActivityTypeBreakdown(athleteId: number): ActivityTypeBreakdo
  * If there are ties (same rank on same segment), picks the most recent effort.
  * Sorted by best rank ascending, then most recent first.
  */
-export function getKomAchievements(
+export async function getKomAchievements(
   athleteId: number,
   limit = 50,
   offset = 0
-): { data: KomAchievement[]; total: number } {
-  const total = db.all<{ count: number }>(sql`
+): Promise<{ data: KomAchievement[]; total: number }> {
+  const total = (await db.all<{ count: number }>(sql`
     SELECT COUNT(DISTINCT se.segment_id) AS count
     FROM segment_efforts se
     WHERE se.athlete_id = ${athleteId}
       AND se.kom_rank IS NOT NULL
-  `)[0];
+  `))[0];
 
-  const rows = db.all<{
+  const rows = await db.all<{
     id: number;
     activity_id: number;
     activity_name: string | null;
@@ -360,13 +360,13 @@ export function getKomAchievements(
  * Also returns cumulative "top N" counts (top5 = segments ranked 1–5,
  * top10 = segments ranked 1–10).
  */
-export function getKomStats(athleteId: number): {
+export async function getKomStats(athleteId: number): Promise<{
   total: number;
   byRank: Record<string, number>;
   top5: number;
   top10: number;
-} {
-  const rows = db.all<{ best_rank: number; count: number }>(sql`
+}> {
+  const rows = await db.all<{ best_rank: number; count: number }>(sql`
     SELECT
       best_rank,
       COUNT(*) AS count
@@ -406,14 +406,14 @@ export function getKomStats(athleteId: number): {
  * Returns the same shape as getKomStats (byRank, top5, top10) but
  * based on the latest fetched ranks rather than historic sync data.
  */
-export function getCurrentKomStats(athleteId: number): {
+export async function getCurrentKomStats(athleteId: number): Promise<{
   total: number;
   byRank: Record<string, number>;
   top5: number;
   top10: number;
   lastChecked: string | null;
-} {
-  const rows = db.all<{ current_rank: number; count: number }>(sql`
+}> {
+  const rows = await db.all<{ current_rank: number; count: number }>(sql`
     SELECT
       current_rank,
       COUNT(*) AS count
@@ -424,13 +424,13 @@ export function getCurrentKomStats(athleteId: number): {
     ORDER BY current_rank ASC
   `);
 
-  const lastCheckedRow = db.all<{ checked_at: string }>(sql`
+  const lastCheckedRow = (await db.all<{ checked_at: string }>(sql`
     SELECT checked_at
     FROM segment_current_ranks
     WHERE athlete_id = ${athleteId}
     ORDER BY checked_at DESC
     LIMIT 1
-  `)[0];
+  `))[0];
 
   const byRank: Record<string, number> = {};
   let total = 0;
@@ -453,11 +453,11 @@ export function getCurrentKomStats(athleteId: number): {
  * Similar to getKomAchievements but reads from segment_current_ranks
  * to show the most up-to-date leaderboard positions.
  */
-export function getCurrentKomAchievements(
+export async function getCurrentKomAchievements(
   athleteId: number,
   limit = 50,
   offset = 0
-): {
+): Promise<{
   data: Array<{
     segmentId: number;
     segmentName: string | null;
@@ -471,15 +471,15 @@ export function getCurrentKomAchievements(
     checkedAt: string;
   }>;
   total: number;
-} {
-  const total = db.all<{ count: number }>(sql`
+}> {
+  const total = (await db.all<{ count: number }>(sql`
     SELECT COUNT(*) AS count
     FROM segment_current_ranks
     WHERE athlete_id = ${athleteId}
       AND current_rank IS NOT NULL
-  `)[0];
+  `))[0];
 
-  const rows = db.all<{
+  const rows = await db.all<{
     segment_id: number;
     segment_name: string | null;
     current_rank: number;
@@ -564,16 +564,16 @@ const EVEREST_FEET = 29_032;
  * Returns aggregated totals, single-ride maxima, active day streak,
  * KOM count, and per-ride data for charting.
  */
-export function getInfographicStats(
+export async function getInfographicStats(
   athleteId: number,
   year: number,
   athleteName: string
-): InfographicStats {
+): Promise<InfographicStats> {
   const startOfYear = `${year}-01-01T00:00:00Z`;
   const endOfYear = `${year}-12-31T23:59:59Z`;
 
   // ── Aggregates ────────────────────────────────────
-  const agg = db.all<{
+  const agg = (await db.all<{
     total_rides: number;
     total_distance: number;
     total_elevation: number;
@@ -601,10 +601,10 @@ export function getInfographicStats(
       AND type IN ('Ride', 'VirtualRide')
       AND start_date >= ${startOfYear}
       AND start_date <= ${endOfYear}
-  `)[0]!;
+  `))[0]!;
 
   // ── Active dates + streak calculation ─────────────
-  const dateRows = db.all<{ ride_date: string }>(sql`
+  const dateRows = await db.all<{ ride_date: string }>(sql`
     SELECT DISTINCT DATE(start_date) AS ride_date
     FROM activities
     WHERE athlete_id = ${athleteId}
@@ -633,17 +633,17 @@ export function getInfographicStats(
   }
 
   // ── New KOMs earned this year ─────────────────────
-  const komRow = db.all<{ new_koms: number }>(sql`
+  const komRow = (await db.all<{ new_koms: number }>(sql`
     SELECT COUNT(DISTINCT segment_id) AS new_koms
     FROM segment_efforts
     WHERE athlete_id = ${athleteId}
       AND kom_rank IS NOT NULL
       AND start_date >= ${startOfYear}
       AND start_date <= ${endOfYear}
-  `)[0]!;
+  `))[0]!;
 
   // ── Per-ride data for chart ───────────────────────
-  const rides = db.all<{
+  const rides = await db.all<{
     ride_date: string;
     distance: number;
     elevation: number;
@@ -691,12 +691,14 @@ export function getInfographicStats(
 /**
  * KOM/PR achievements grouped by month for timeline charts.
  */
-export function getKomPrTimeline(athleteId: number): Array<{
-  month: string;
-  koms: number;
-  prs: number;
-}> {
-  return db.all<{ month: string; koms: number; prs: number }>(sql`
+export async function getKomPrTimeline(athleteId: number): Promise<
+  Array<{
+    month: string;
+    koms: number;
+    prs: number;
+  }>
+> {
+  return await db.all<{ month: string; koms: number; prs: number }>(sql`
     SELECT
       strftime('%Y-%m', start_date) AS month,
       SUM(CASE WHEN kom_rank IS NOT NULL THEN 1 ELSE 0 END) AS koms,

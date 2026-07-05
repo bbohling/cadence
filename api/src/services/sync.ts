@@ -55,7 +55,7 @@ export async function syncUser(userId: string): Promise<SyncResult> {
   const start = Date.now();
 
   // Look up the user
-  const user = db.select().from(users).where(eq(users.name, userId)).get();
+  const user = await db.select().from(users).where(eq(users.name, userId)).get();
   if (!user) {
     throw new Error(`User not found: ${userId}`);
   }
@@ -95,13 +95,13 @@ export async function syncUser(userId: string): Promise<SyncResult> {
       // Fetch full details for each activity
       for (const summary of summaries) {
         const detail = await getActivityDetail(token, summary.id);
-        const result = upsertActivity(detail, user.athleteId!);
+        const result = await upsertActivity(detail, user.athleteId!);
         if (result === "added") activitiesAdded++;
         if (result === "updated") activitiesUpdated++;
 
         // Store segment efforts
         if (detail.segment_efforts) {
-          const count = upsertSegmentEfforts(
+          const count = await upsertSegmentEfforts(
             detail.segment_efforts,
             detail.id,
             user.athleteId!
@@ -111,7 +111,7 @@ export async function syncUser(userId: string): Promise<SyncResult> {
 
         // Store gear if present
         if (detail.gear) {
-          const added = upsertGear(detail.gear, user.athleteId!);
+          const added = await upsertGear(detail.gear, user.athleteId!);
           if (added) gearsAdded++;
         }
       }
@@ -125,7 +125,7 @@ export async function syncUser(userId: string): Promise<SyncResult> {
     await syncGears(token, user.athleteId!);
 
     // Update lastSyncAt
-    db.update(users)
+    await db.update(users)
       .set({ lastSyncAt: now(), updatedAt: now() })
       .where(eq(users.id, user.id))
       .run();
@@ -133,7 +133,7 @@ export async function syncUser(userId: string): Promise<SyncResult> {
     const durationMs = Date.now() - start;
 
     // Log the sync
-    db.insert(syncLogs)
+    await db.insert(syncLogs)
       .values({
         id: generateId(),
         userId,
@@ -161,7 +161,7 @@ export async function syncUser(userId: string): Promise<SyncResult> {
     const durationMs = Date.now() - start;
     const errorMsg = error instanceof Error ? error.message : String(error);
 
-    db.insert(syncLogs)
+    await db.insert(syncLogs)
       .values({
         id: generateId(),
         userId,
@@ -187,11 +187,11 @@ export async function syncUser(userId: string): Promise<SyncResult> {
  * activities that already exist. The `rawJson` column preserves
  * the complete API response for future re-extraction.
  */
-function upsertActivity(
+async function upsertActivity(
   detail: StravaDetailedActivity,
   athleteId: number
-): "added" | "updated" {
-  const existing = db
+): Promise<"added" | "updated"> {
+  const existing = await db
     .select({ id: srcActivities.id })
     .from(srcActivities)
     .where(eq(srcActivities.id, detail.id))
@@ -243,14 +243,14 @@ function upsertActivity(
   };
 
   if (existing) {
-    db.update(srcActivities)
+    await db.update(srcActivities)
       .set({ ...values, updatedAt: timestamp })
       .where(eq(srcActivities.id, detail.id))
       .run();
     return "updated";
   }
 
-  db.insert(srcActivities)
+  await db.insert(srcActivities)
     .values({ ...values, createdAt: timestamp, updatedAt: timestamp })
     .run();
   return "added";
@@ -262,16 +262,16 @@ function upsertActivity(
  * Each activity can have dozens of segment efforts. We store each
  * one individually for efficient KOM/PR querying.
  */
-function upsertSegmentEfforts(
+async function upsertSegmentEfforts(
   efforts: StravaSegmentEffort[],
   activityId: number,
   athleteId: number
-): number {
+): Promise<number> {
   let count = 0;
   const timestamp = now();
 
   for (const effort of efforts) {
-    const existing = db
+    const existing = await db
       .select({ id: srcSegmentEfforts.id })
       .from(srcSegmentEfforts)
       .where(eq(srcSegmentEfforts.id, effort.id))
@@ -301,12 +301,12 @@ function upsertSegmentEfforts(
     };
 
     if (existing) {
-      db.update(srcSegmentEfforts)
+      await db.update(srcSegmentEfforts)
         .set({ ...values, updatedAt: timestamp })
         .where(eq(srcSegmentEfforts.id, effort.id))
         .run();
     } else {
-      db.insert(srcSegmentEfforts)
+      await db.insert(srcSegmentEfforts)
         .values({ ...values, createdAt: timestamp, updatedAt: timestamp })
         .run();
       count++;
@@ -319,8 +319,8 @@ function upsertSegmentEfforts(
 /**
  * Stores a gear item in src_gears.
  */
-function upsertGear(gear: StravaGear, athleteId: number): boolean {
-  const existing = db
+async function upsertGear(gear: StravaGear, athleteId: number): Promise<boolean> {
+  const existing = await db
     .select({ id: srcGears.id })
     .from(srcGears)
     .where(eq(srcGears.id, gear.id))
@@ -342,14 +342,14 @@ function upsertGear(gear: StravaGear, athleteId: number): boolean {
   };
 
   if (existing) {
-    db.update(srcGears)
+    await db.update(srcGears)
       .set({ ...values, updatedAt: timestamp })
       .where(eq(srcGears.id, gear.id))
       .run();
     return false;
   }
 
-  db.insert(srcGears)
+  await db.insert(srcGears)
     .values({ ...values, createdAt: timestamp, updatedAt: timestamp })
     .run();
   return true;

@@ -22,7 +22,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/api": {
-        target: "http://localhost:3033",
+        target: "http://localhost:8787", // wrangler dev
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/api/, ""),
       },

@@ -56,17 +56,17 @@ export interface NormalizeResult {
  *
  * @param force — if true, re-normalizes ALL rows regardless of timestamps
  */
-export function runNormalization(force = false): NormalizeResult {
+export async function runNormalization(force = false): Promise<NormalizeResult> {
   const start = Date.now();
 
   log.info("Starting normalization", { force });
 
-  const activitiesNormalized = normalizeActivities(force);
-  const segmentEffortsNormalized = normalizeSegmentEfforts(force);
-  const gearsNormalized = normalizeGears(force);
+  const activitiesNormalized = await normalizeActivities(force);
+  const segmentEffortsNormalized = await normalizeSegmentEfforts(force);
+  const gearsNormalized = await normalizeGears(force);
 
   // After normalizing segment efforts, recompute KOM/PR counts on activities
-  recomputeKomStats();
+  await recomputeKomStats();
 
   const durationMs = Date.now() - start;
 
@@ -82,7 +82,7 @@ export function runNormalization(force = false): NormalizeResult {
 
 // ── Activity Normalization ─────────────────────────────
 
-function normalizeActivities(force: boolean): number {
+async function normalizeActivities(force: boolean): Promise<number> {
   let processed = 0;
   let offset = 0;
 
@@ -91,7 +91,7 @@ function normalizeActivities(force: boolean): number {
     let rows;
 
     if (force) {
-      rows = db
+      rows = await db
         .select()
         .from(srcActivities)
         .limit(BATCH_SIZE)
@@ -99,7 +99,7 @@ function normalizeActivities(force: boolean): number {
         .all();
     } else {
       // Only rows that are new or updated since last normalization
-      rows = db
+      rows = (await db
         .select({
           src: srcActivities,
           normalizedAt: activities.normalizedAt,
@@ -113,7 +113,7 @@ function normalizeActivities(force: boolean): number {
           )
         )
         .limit(BATCH_SIZE)
-        .all()
+        .all())
         .map((r) => r.src);
     }
 
@@ -174,19 +174,19 @@ function normalizeActivities(force: boolean): number {
       };
 
       // Upsert into the normalized activities table
-      const existing = db
+      const existing = await db
         .select({ id: activities.id })
         .from(activities)
         .where(eq(activities.id, src.id))
         .get();
 
       if (existing) {
-        db.update(activities)
+        await db.update(activities)
           .set(normalized)
           .where(eq(activities.id, src.id))
           .run();
       } else {
-        db.insert(activities)
+        await db.insert(activities)
           .values({ ...normalized, createdAt: timestamp })
           .run();
       }
@@ -203,7 +203,7 @@ function normalizeActivities(force: boolean): number {
 
 // ── Segment Effort Normalization ───────────────────────
 
-function normalizeSegmentEfforts(force: boolean): number {
+async function normalizeSegmentEfforts(force: boolean): Promise<number> {
   let processed = 0;
   let offset = 0;
 
@@ -211,14 +211,14 @@ function normalizeSegmentEfforts(force: boolean): number {
     let rows;
 
     if (force) {
-      rows = db
+      rows = await db
         .select()
         .from(srcSegmentEfforts)
         .limit(BATCH_SIZE)
         .offset(offset)
         .all();
     } else {
-      rows = db
+      rows = (await db
         .select({
           src: srcSegmentEfforts,
           normalizedAt: segmentEfforts.normalizedAt,
@@ -232,7 +232,7 @@ function normalizeSegmentEfforts(force: boolean): number {
           )
         )
         .limit(BATCH_SIZE)
-        .all()
+        .all())
         .map((r) => r.src);
     }
 
@@ -288,19 +288,19 @@ function normalizeSegmentEfforts(force: boolean): number {
         updatedAt: timestamp,
       };
 
-      const existing = db
+      const existing = await db
         .select({ id: segmentEfforts.id })
         .from(segmentEfforts)
         .where(eq(segmentEfforts.id, src.id))
         .get();
 
       if (existing) {
-        db.update(segmentEfforts)
+        await db.update(segmentEfforts)
           .set(normalized)
           .where(eq(segmentEfforts.id, src.id))
           .run();
       } else {
-        db.insert(segmentEfforts)
+        await db.insert(segmentEfforts)
           .values({ ...normalized, createdAt: timestamp })
           .run();
       }
@@ -317,17 +317,17 @@ function normalizeSegmentEfforts(force: boolean): number {
 
 // ── Gear Normalization ─────────────────────────────────
 
-function normalizeGears(force: boolean): number {
+async function normalizeGears(force: boolean): Promise<number> {
   let processed = 0;
 
   // Gears are few enough to always process all at once
-  const rows = db.select().from(srcGears).all();
+  const rows = await db.select().from(srcGears).all();
 
   const timestamp = now();
 
   for (const src of rows) {
     if (!force) {
-      const existing = db
+      const existing = await db
         .select({ normalizedAt: gears.normalizedAt })
         .from(gears)
         .where(eq(gears.id, src.id))
@@ -353,19 +353,19 @@ function normalizeGears(force: boolean): number {
       updatedAt: timestamp,
     };
 
-    const existing = db
+    const existing = await db
       .select({ id: gears.id })
       .from(gears)
       .where(eq(gears.id, src.id))
       .get();
 
     if (existing) {
-      db.update(gears)
+      await db.update(gears)
         .set(normalized)
         .where(eq(gears.id, src.id))
         .run();
     } else {
-      db.insert(gears)
+      await db.insert(gears)
         .values({ ...normalized, createdAt: timestamp })
         .run();
     }
@@ -385,10 +385,10 @@ function normalizeGears(force: boolean): number {
  * This runs as a single SQL update for efficiency rather than
  * looping through activities one by one.
  */
-function recomputeKomStats(): void {
+async function recomputeKomStats(): Promise<void> {
   // Use raw SQL for this aggregation — it's much faster than
   // looping through activities in JavaScript.
-  db.run(sql`
+  await db.run(sql`
     UPDATE activities SET
       kom_count = COALESCE((
         SELECT COUNT(*) FROM segment_efforts

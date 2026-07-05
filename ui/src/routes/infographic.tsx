@@ -431,9 +431,10 @@ function ElevationProfile({
                 fontSize: "12px",
               }}
               labelFormatter={(v) => `${v} mi cumulative`}
-              formatter={(value: number, name: string) => {
-                if (name === "elevation") return [`${formatNumber(value)} ft`, "Elevation"];
-                return [value, name];
+              formatter={(value, name) => {
+                if (name === "elevation")
+                  return [`${formatNumber(Number(value ?? 0))} ft`, "Elevation"];
+                return [value ?? 0, name];
               }}
             />
             <Area

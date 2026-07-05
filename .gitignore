@@ -1,1 +1,5 @@
 **/.DS_Store
+# Cloudflare
+api/.wrangler/
+api/.dev.vars
+api/data/

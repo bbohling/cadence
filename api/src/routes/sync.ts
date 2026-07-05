@@ -21,7 +21,7 @@ sync.post("/:userId", async (c) => {
     const result = await syncUser(userId);
 
     // After syncing, run normalization to update the normalized tables
-    const normResult = runNormalization();
+    const normResult = await runNormalization();
 
     return c.json({
       sync: result,
@@ -49,9 +49,9 @@ sync.post("/bulk/:userId/start", async (c) => {
 });
 
 // GET /sync/bulk/:userId/status — get bulk sync status
-sync.get("/bulk/:userId/status", (c) => {
+sync.get("/bulk/:userId/status", async (c) => {
   const userId = c.req.param("userId");
-  const status = getBulkSyncStatus(userId);
+  const status = await getBulkSyncStatus(userId);
   if (!status) {
     return c.json({ status: "none", message: "No bulk sync found." });
   }
@@ -66,9 +66,9 @@ sync.delete("/bulk/:userId/reset", (c) => {
 });
 
 // POST /sync/normalize — trigger normalization manually
-sync.post("/normalize", (c) => {
+sync.post("/normalize", async (c) => {
   const force = c.req.query("force") === "true";
-  const result = runNormalization(force);
+  const result = await runNormalization(force);
   return c.json(result);
 });
 

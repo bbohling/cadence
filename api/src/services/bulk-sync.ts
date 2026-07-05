@@ -44,10 +44,10 @@ export async function startBulkSync(
   userId: string,
   force = false
 ): Promise<{ status: string; message: string }> {
-  const user = db.select().from(users).where(eq(users.name, userId)).get();
+  const user = await db.select().from(users).where(eq(users.name, userId)).get();
   if (!user) throw new Error(`User not found: ${userId}`);
 
-  let state = db
+  let state = await db
     .select()
     .from(bulkSyncStates)
     .where(eq(bulkSyncStates.userId, userId))
@@ -55,8 +55,8 @@ export async function startBulkSync(
 
   // Reset if forced or if we need to start fresh
   if (force && state) {
-    db.delete(bulkSyncStates).where(eq(bulkSyncStates.userId, userId)).run();
-    db.delete(bulkSyncSummaries).where(eq(bulkSyncSummaries.userId, userId)).run();
+    await db.delete(bulkSyncStates).where(eq(bulkSyncStates.userId, userId)).run();
+    await db.delete(bulkSyncSummaries).where(eq(bulkSyncSummaries.userId, userId)).run();
     state = undefined;
   }
 
@@ -70,7 +70,7 @@ export async function startBulkSync(
 
   // Create or update state
   if (!state) {
-    db.insert(bulkSyncStates)
+    await db.insert(bulkSyncStates)
       .values({
         id: generateId(),
         userId,
@@ -83,17 +83,17 @@ export async function startBulkSync(
       })
       .run();
   } else {
-    db.update(bulkSyncStates)
+    await db.update(bulkSyncStates)
       .set({ status: "running", updatedAt: now() })
       .where(eq(bulkSyncStates.userId, userId))
       .run();
   }
 
   // Run the sync (this is async and can take a long time)
-  runBulkSync(user).catch((error) => {
+  runBulkSync(user).catch(async (error) => {
     const msg = error instanceof Error ? error.message : String(error);
     log.error("Bulk sync failed", { userId, error: msg });
-    db.update(bulkSyncStates)
+    await db.update(bulkSyncStates)
       .set({ status: "error", errorMessage: msg, updatedAt: now() })
       .where(eq(bulkSyncStates.userId, userId))
       .run();
@@ -105,9 +105,9 @@ export async function startBulkSync(
 /**
  * Get current bulk sync status.
  */
-export function getBulkSyncStatus(userId: string): BulkSyncState | null {
+export async function getBulkSyncStatus(userId: string): Promise<BulkSyncState | null> {
   return (
-    db
+    await db
       .select()
       .from(bulkSyncStates)
       .where(eq(bulkSyncStates.userId, userId))
@@ -118,9 +118,9 @@ export function getBulkSyncStatus(userId: string): BulkSyncState | null {
 /**
  * Reset a bulk sync (delete state and summaries).
  */
-export function resetBulkSync(userId: string): void {
-  db.delete(bulkSyncStates).where(eq(bulkSyncStates.userId, userId)).run();
-  db.delete(bulkSyncSummaries).where(eq(bulkSyncSummaries.userId, userId)).run();
+export async function resetBulkSync(userId: string): Promise<void> {
+  await db.delete(bulkSyncStates).where(eq(bulkSyncStates.userId, userId)).run();
+  await db.delete(bulkSyncSummaries).where(eq(bulkSyncSummaries.userId, userId)).run();
   log.info("Bulk sync reset", { userId });
 }
 
@@ -130,29 +130,29 @@ async function runBulkSync(user: User): Promise<void> {
   const token = await ensureValidToken(user);
   const userId = user.name!;
 
-  let state = db
+  let state = (await db
     .select()
     .from(bulkSyncStates)
     .where(eq(bulkSyncStates.userId, userId))
-    .get()!;
+    .get())!;
 
   // Phase 1: Fetch all activity summaries
   if (state.phase === "summary_fetch") {
     log.info("Bulk sync: starting summary fetch", { userId });
     await fetchAllSummaries(token, userId);
 
-    db.update(bulkSyncStates)
+    await db.update(bulkSyncStates)
       .set({ phase: "detail_fetch", updatedAt: now() })
       .where(eq(bulkSyncStates.userId, userId))
       .run();
   }
 
   // Phase 2: Fetch details for each activity
-  state = db
+  state = (await db
     .select()
     .from(bulkSyncStates)
     .where(eq(bulkSyncStates.userId, userId))
-    .get()!;
+    .get())!;
 
   if (state.phase === "detail_fetch") {
     log.info("Bulk sync: starting detail fetch", { userId });
@@ -160,7 +160,7 @@ async function runBulkSync(user: User): Promise<void> {
   }
 
   // Mark complete
-  db.update(bulkSyncStates)
+  await db.update(bulkSyncStates)
     .set({
       status: "complete",
       phase: "complete",
@@ -177,11 +177,11 @@ async function runBulkSync(user: User): Promise<void> {
  * Phase 1: Paginate through all activity summaries and store them.
  */
 async function fetchAllSummaries(token: string, userId: string): Promise<void> {
-  const state = db
+  const state = (await db
     .select()
     .from(bulkSyncStates)
     .where(eq(bulkSyncStates.userId, userId))
-    .get()!;
+    .get())!;
 
   let page = state.currentPage ?? 1;
   let total = 0;
@@ -193,7 +193,7 @@ async function fetchAllSummaries(token: string, userId: string): Promise<void> {
 
     // Store each summary
     for (const summary of summaries) {
-      db.insert(bulkSyncSummaries)
+      await db.insert(bulkSyncSummaries)
         .values({
           id: generateId(),
           userId,
@@ -208,7 +208,7 @@ async function fetchAllSummaries(token: string, userId: string): Promise<void> {
     total += summaries.length;
 
     // Update progress
-    db.update(bulkSyncStates)
+    await db.update(bulkSyncStates)
       .set({
         currentPage: page + 1,
         processedSummaries: total,
@@ -224,13 +224,13 @@ async function fetchAllSummaries(token: string, userId: string): Promise<void> {
   }
 
   // Count total activities to process
-  const countResult = db
+  const countResult = await db
     .select({ count: sql<number>`count(*)` })
     .from(bulkSyncSummaries)
     .where(eq(bulkSyncSummaries.userId, userId))
     .get();
 
-  db.update(bulkSyncStates)
+  await db.update(bulkSyncStates)
     .set({ totalActivities: countResult?.count ?? total, updatedAt: now() })
     .where(eq(bulkSyncStates.userId, userId))
     .run();
@@ -246,18 +246,18 @@ async function fetchAllDetails(token: string, user: User): Promise<void> {
   const userId = user.name!;
   const athleteId = user.athleteId!;
 
-  const state = db
+  const state = (await db
     .select()
     .from(bulkSyncStates)
     .where(eq(bulkSyncStates.userId, userId))
-    .get()!;
+    .get())!;
 
   const processedIds: Set<number> = new Set(
     JSON.parse(state.processedActivityIds ?? "[]")
   );
 
   // Get all summaries that haven't been processed yet
-  const summaries = db
+  const summaries = await db
     .select()
     .from(bulkSyncSummaries)
     .where(eq(bulkSyncSummaries.userId, userId))
@@ -305,7 +305,7 @@ async function fetchAllDetails(token: string, user: User): Promise<void> {
     }
 
     // Update progress
-    db.update(bulkSyncStates)
+    await db.update(bulkSyncStates)
       .set({
         processedActivities: processedIds.size,
         processedActivityIds: JSON.stringify([...processedIds]),
@@ -334,7 +334,7 @@ async function fetchAllDetails(token: string, user: User): Promise<void> {
 
 // ── Upsert helpers (duplicated from sync.ts for isolation) ──
 
-function upsertSrcActivity(detail: any, athleteId: number): void {
+async function upsertSrcActivity(detail: any, athleteId: number): Promise<void> {
   const timestamp = now();
   const values = {
     id: detail.id,
@@ -378,32 +378,32 @@ function upsertSrcActivity(detail: any, athleteId: number): void {
     fetchedAt: timestamp,
   };
 
-  const existing = db
+  const existing = await db
     .select({ id: srcActivities.id })
     .from(srcActivities)
     .where(eq(srcActivities.id, detail.id))
     .get();
 
   if (existing) {
-    db.update(srcActivities)
+    await db.update(srcActivities)
       .set({ ...values, updatedAt: timestamp })
       .where(eq(srcActivities.id, detail.id))
       .run();
   } else {
-    db.insert(srcActivities)
+    await db.insert(srcActivities)
       .values({ ...values, createdAt: timestamp, updatedAt: timestamp })
       .run();
   }
 }
 
-function upsertSrcSegmentEfforts(
+async function upsertSrcSegmentEfforts(
   efforts: any[],
   activityId: number,
   athleteId: number
-): void {
+): Promise<void> {
   const timestamp = now();
   for (const effort of efforts) {
-    const existing = db
+    const existing = await db
       .select({ id: srcSegmentEfforts.id })
       .from(srcSegmentEfforts)
       .where(eq(srcSegmentEfforts.id, effort.id))
@@ -433,21 +433,21 @@ function upsertSrcSegmentEfforts(
     };
 
     if (existing) {
-      db.update(srcSegmentEfforts)
+      await db.update(srcSegmentEfforts)
         .set({ ...values, updatedAt: timestamp })
         .where(eq(srcSegmentEfforts.id, effort.id))
         .run();
     } else {
-      db.insert(srcSegmentEfforts)
+      await db.insert(srcSegmentEfforts)
         .values({ ...values, createdAt: timestamp, updatedAt: timestamp })
         .run();
     }
   }
 }
 
-function upsertSrcGear(gear: any, athleteId: number): void {
+async function upsertSrcGear(gear: any, athleteId: number): Promise<void> {
   const timestamp = now();
-  const existing = db
+  const existing = await db
     .select({ id: srcGears.id })
     .from(srcGears)
     .where(eq(srcGears.id, gear.id))
@@ -468,12 +468,12 @@ function upsertSrcGear(gear: any, athleteId: number): void {
   };
 
   if (existing) {
-    db.update(srcGears)
+    await db.update(srcGears)
       .set({ ...values, updatedAt: timestamp })
       .where(eq(srcGears.id, gear.id))
       .run();
   } else {
-    db.insert(srcGears)
+    await db.insert(srcGears)
       .values({ ...values, createdAt: timestamp, updatedAt: timestamp })
       .run();
   }

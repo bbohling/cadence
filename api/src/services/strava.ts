@@ -84,7 +84,7 @@ export async function ensureValidToken(user: User): Promise<string> {
   };
 
   // Save the new tokens to the database
-  db.update(users)
+  await db.update(users)
     .set({
       accessToken: data.access_token,
       refreshToken: data.refresh_token,
@@ -163,14 +163,14 @@ function calculateDelay(utilization: number): number {
 /**
  * Logs rate limit data to the database for monitoring.
  */
-function logRateLimits(
+async function logRateLimits(
   endpoint: string,
   limits: RateLimitInfo,
   delayMs: number,
   wasLimited: boolean
-): void {
+): Promise<void> {
   const utilization = getUtilization(limits);
-  db.insert(rateLimitLogs)
+  await db.insert(rateLimitLogs)
     .values({
       id: generateId(),
       timestamp: now(),

@@ -1,0 +1,42 @@
+name: Deploy UI (Cloudflare Pages)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ui/**"
+      - ".github/workflows/deploy-ui.yml"
+  workflow_dispatch: # manual runs from any branch
+
+concurrency:
+  group: deploy-cadence-ui
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Build
+        working-directory: ui
+        env:
+          # Same-origin: the Worker route serves /api on cadence.bbohling.com
+          VITE_API_URL: /api
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+
+      - name: Deploy to Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy ui/dist --project-name=cadence --branch=main

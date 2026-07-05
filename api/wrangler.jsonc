@@ -1,0 +1,50 @@
+{
+  // Cadence API — Cloudflare Workers configuration
+  // Deploy:  npx wrangler deploy
+  // Dev:     npx wrangler dev  (uses a local D1 replica)
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cadence-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-01",
+  // nodejs_compat populates process.env from vars/secrets, so
+  // src/utils/config.ts works unchanged.
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Plain-text config (secrets are set via `wrangler secret put`)
+  "vars": {
+    "NODE_ENV": "production",
+    // Production is same-origin (UI + /api both on cadence.bbohling.com),
+    // so this mainly matters for the pages.dev preview URL and local dev.
+    "CORS_ORIGIN": "https://main.cadence-97l.pages.dev"
+  },
+
+  // Zone route: intercepts /api/* on the Pages-hosted domain, everything
+  // else on that host falls through to Pages. Requires the bbohling.com
+  // zone to be ACTIVE on Cloudflare before deploying.
+  "routes": [
+    {
+      "pattern": "cadence.bbohling.com/api/*",
+      "zone_name": "bbohling.com"
+    }
+  ],
+
+  // D1 database binding — fill database_id in after `wrangler d1 create cadence`
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "cadence",
+      "database_id": "8862b224-8157-44d9-8552-06f07012c47c"
+    }
+  ],
+
+  // Cron Triggers (UTC). Must match the constants in src/index.ts.
+  //   5 * * * *   — hourly Strava sync + normalization (:05 past each hour)
+  //   0 12 * * *  — daily KOM refresh (4 AM PST / 5 AM PDT)
+  "triggers": {
+    "crons": ["5 * * * *", "0 12 * * *"]
+  },
+
+  "observability": {
+    "enabled": true
+  }
+}

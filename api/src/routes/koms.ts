@@ -22,8 +22,8 @@ import { log } from "../utils/logger";
  */
 const koms = new Hono();
 
-function resolveAthleteId(userId: string): number {
-  const user = db.select().from(users).where(eq(users.name, userId)).get();
+async function resolveAthleteId(userId: string): Promise<number> {
+  const user = await db.select().from(users).where(eq(users.name, userId)).get();
   if (!user?.athleteId) throw new Error(`User not found: ${userId}`);
   return user.athleteId;
 }
@@ -31,46 +31,46 @@ function resolveAthleteId(userId: string): number {
 // ── Historic (sync-time) KOM data ───────────────────────
 
 // GET /koms/:userId — paginated KOM list (historic)
-koms.get("/:userId", (c) => {
-  const athleteId = resolveAthleteId(c.req.param("userId"));
+koms.get("/:userId", async (c) => {
+  const athleteId = await resolveAthleteId(c.req.param("userId"));
   const limit = parseInt(c.req.query("limit") ?? "50", 10);
   const offset = parseInt(c.req.query("offset") ?? "0", 10);
-  return c.json(getKomAchievements(athleteId, limit, offset));
+  return c.json(await getKomAchievements(athleteId, limit, offset));
 });
 
 // GET /koms/:userId/stats — KOM aggregate stats (historic)
-koms.get("/:userId/stats", (c) => {
-  const athleteId = resolveAthleteId(c.req.param("userId"));
-  return c.json(getKomStats(athleteId));
+koms.get("/:userId/stats", async (c) => {
+  const athleteId = await resolveAthleteId(c.req.param("userId"));
+  return c.json(await getKomStats(athleteId));
 });
 
 // GET /koms/:userId/all — all KOMs, no pagination (historic)
-koms.get("/:userId/all", (c) => {
-  const athleteId = resolveAthleteId(c.req.param("userId"));
-  return c.json(getKomAchievements(athleteId, 10000, 0));
+koms.get("/:userId/all", async (c) => {
+  const athleteId = await resolveAthleteId(c.req.param("userId"));
+  return c.json(await getKomAchievements(athleteId, 10000, 0));
 });
 
 // ── Current (live) KOM data ─────────────────────────────
 
 // GET /koms/:userId/current/stats — current leaderboard stats
-koms.get("/:userId/current/stats", (c) => {
-  const athleteId = resolveAthleteId(c.req.param("userId"));
-  return c.json(getCurrentKomStats(athleteId));
+koms.get("/:userId/current/stats", async (c) => {
+  const athleteId = await resolveAthleteId(c.req.param("userId"));
+  return c.json(await getCurrentKomStats(athleteId));
 });
 
 // GET /koms/:userId/current — paginated current ranked segments
-koms.get("/:userId/current", (c) => {
-  const athleteId = resolveAthleteId(c.req.param("userId"));
+koms.get("/:userId/current", async (c) => {
+  const athleteId = await resolveAthleteId(c.req.param("userId"));
   const limit = parseInt(c.req.query("limit") ?? "50", 10);
   const offset = parseInt(c.req.query("offset") ?? "0", 10);
-  return c.json(getCurrentKomAchievements(athleteId, limit, offset));
+  return c.json(await getCurrentKomAchievements(athleteId, limit, offset));
 });
 
 // POST /koms/:userId/current/refresh — trigger a background KOM refresh
 //
 // Returns 202 immediately and runs the refresh asynchronously.
 // Poll GET /koms/:userId/current/refresh/status to check progress.
-koms.post("/:userId/current/refresh", (c) => {
+koms.post("/:userId/current/refresh", async (c) => {
   const userId = c.req.param("userId");
 
   const status = getRefreshStatus();
@@ -96,8 +96,8 @@ koms.post("/:userId/current/refresh", (c) => {
 });
 
 // GET /koms/:userId/current/refresh/status — poll refresh progress
-koms.get("/:userId/current/refresh/status", (c) => {
-  return c.json(getRefreshStatus());
+koms.get("/:userId/current/refresh/status", async (c) => {
+  return c.json(await getRefreshStatus());
 });
 
 export { koms };

@@ -26,8 +26,8 @@ const reports = new Hono();
  * Resolve a userId (like "brandon") to a Strava athleteId.
  * Throws 404 if the user doesn't exist.
  */
-function resolveAthleteId(userId: string): number {
-  const user = db.select().from(users).where(eq(users.name, userId)).get();
+async function resolveAthleteId(userId: string): Promise<number> {
+  const user = await db.select().from(users).where(eq(users.name, userId)).get();
   if (!user?.athleteId) {
     throw new Error(`User not found: ${userId}`);
   }
@@ -35,47 +35,47 @@ function resolveAthleteId(userId: string): number {
 }
 
 // GET /reports/cycling/yearly/:userId
-reports.get("/cycling/yearly/:userId", (c) => {
-  const athleteId = resolveAthleteId(c.req.param("userId"));
-  return c.json(getYearlyStats(athleteId));
+reports.get("/cycling/yearly/:userId", async (c) => {
+  const athleteId = await resolveAthleteId(c.req.param("userId"));
+  return c.json(await getYearlyStats(athleteId));
 });
 
 // GET /reports/cycling/progress/:userId
-reports.get("/cycling/progress/:userId", (c) => {
-  const athleteId = resolveAthleteId(c.req.param("userId"));
-  return c.json(getYearOverYearProgress(athleteId));
+reports.get("/cycling/progress/:userId", async (c) => {
+  const athleteId = await resolveAthleteId(c.req.param("userId"));
+  return c.json(await getYearOverYearProgress(athleteId));
 });
 
 // GET /reports/year-over-year/:userId
-reports.get("/year-over-year/:userId", (c) => {
-  const athleteId = resolveAthleteId(c.req.param("userId"));
-  return c.json(getYearOverYearProgress(athleteId));
+reports.get("/year-over-year/:userId", async (c) => {
+  const athleteId = await resolveAthleteId(c.req.param("userId"));
+  return c.json(await getYearOverYearProgress(athleteId));
 });
 
 // GET /reports/gear-usage/:userId
-reports.get("/gear-usage/:userId", (c) => {
-  const athleteId = resolveAthleteId(c.req.param("userId"));
-  return c.json(getGearUsage(athleteId));
+reports.get("/gear-usage/:userId", async (c) => {
+  const athleteId = await resolveAthleteId(c.req.param("userId"));
+  return c.json(await getGearUsage(athleteId));
 });
 
 // GET /reports/activity-type/:userId
-reports.get("/activity-type/:userId", (c) => {
-  const athleteId = resolveAthleteId(c.req.param("userId"));
-  return c.json(getActivityTypeBreakdown(athleteId));
+reports.get("/activity-type/:userId", async (c) => {
+  const athleteId = await resolveAthleteId(c.req.param("userId"));
+  return c.json(await getActivityTypeBreakdown(athleteId));
 });
 
 // GET /reports/kom-pr-achievements/:userId
-reports.get("/kom-pr-achievements/:userId", (c) => {
-  const athleteId = resolveAthleteId(c.req.param("userId"));
-  return c.json(getKomPrTimeline(athleteId));
+reports.get("/kom-pr-achievements/:userId", async (c) => {
+  const athleteId = await resolveAthleteId(c.req.param("userId"));
+  return c.json(await getKomPrTimeline(athleteId));
 });
 
 // GET /reports/infographic/:userId/years — list available years
 // NOTE: This must be registered before the /:year route so "years"
 // doesn't get matched as a year parameter.
-reports.get("/infographic/:userId/years", (c) => {
-  const athleteId = resolveAthleteId(c.req.param("userId"));
-  const rows = db.all<{ year: number }>(sql`
+reports.get("/infographic/:userId/years", async (c) => {
+  const athleteId = await resolveAthleteId(c.req.param("userId"));
+  const rows = await db.all<{ year: number }>(sql`
     SELECT DISTINCT CAST(strftime('%Y', start_date) AS INTEGER) AS year
     FROM activities
     WHERE athlete_id = ${athleteId}
@@ -87,9 +87,9 @@ reports.get("/infographic/:userId/years", (c) => {
 });
 
 // GET /reports/infographic/:userId/:year
-reports.get("/infographic/:userId/:year", (c) => {
+reports.get("/infographic/:userId/:year", async (c) => {
   const userId = c.req.param("userId");
-  const athleteId = resolveAthleteId(userId);
+  const athleteId = await resolveAthleteId(userId);
   const year = Number(c.req.param("year"));
 
   if (!year || year < 2000 || year > 2100) {
@@ -98,7 +98,7 @@ reports.get("/infographic/:userId/:year", (c) => {
 
   // Use the userId as the display name (capitalized)
   const name = userId.charAt(0).toUpperCase() + userId.slice(1);
-  return c.json(getInfographicStats(athleteId, year, name));
+  return c.json(await getInfographicStats(athleteId, year, name));
 });
 
 export { reports };

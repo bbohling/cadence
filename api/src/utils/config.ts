@@ -23,31 +23,50 @@ function envInt(key: string, fallback: number): number {
 
 export const config = {
   // ── Server ──────────────────────────────────────────
-  port: envInt("PORT", 3033),
-  nodeEnv: env("NODE_ENV", "development"),
+  // NOTE: env-derived values are getters so they read process.env
+  // lazily — on Cloudflare Workers, vars/secrets are populated per
+  // execution context, not necessarily at module-load time.
+  get port() {
+    return envInt("PORT", 3033);
+  },
+  get nodeEnv() {
+    return env("NODE_ENV", "development");
+  },
   get isDev() {
     return this.nodeEnv === "development";
   },
 
   // ── Database ────────────────────────────────────────
-  databasePath: env("DATABASE_PATH", "./data/cadence.db"),
+  get databasePath() {
+    return env("DATABASE_PATH", "./data/cadence.db");
+  },
 
   // ── Strava ──────────────────────────────────────────
   strava: {
-    clientId: env("STRAVA_CLIENT_ID", ""),
-    clientSecret: env("STRAVA_CLIENT_SECRET", ""),
+    get clientId() {
+      return env("STRAVA_CLIENT_ID", "");
+    },
+    get clientSecret() {
+      return env("STRAVA_CLIENT_SECRET", "");
+    },
     apiBaseUrl: "https://www.strava.com/api/v3",
     oauthUrl: "https://www.strava.com/oauth/token",
   },
 
   // ── CORS ────────────────────────────────────────────
-  corsOrigin: env("CORS_ORIGIN", "http://localhost:5173"),
+  get corsOrigin() {
+    return env("CORS_ORIGIN", "http://localhost:5173");
+  },
 
   // ── Data freshness ──────────────────────────────────
   /** Minutes before data is considered stale */
-  ingestStalenessMinutes: envInt("INGEST_STALENESS_MINUTES", 30),
+  get ingestStalenessMinutes() {
+    return envInt("INGEST_STALENESS_MINUTES", 30);
+  },
   /** Minimum minutes between background syncs */
-  ingestMinIntervalMinutes: envInt("INGEST_MIN_INTERVAL_MINUTES", 15),
+  get ingestMinIntervalMinutes() {
+    return envInt("INGEST_MIN_INTERVAL_MINUTES", 15);
+  },
 
   // ── Rate limits (Strava defaults) ───────────────────
   rateLimits: {

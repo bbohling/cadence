@@ -10,15 +10,15 @@ import { sql } from "drizzle-orm";
  */
 const health = new Hono();
 
-health.get("/", (c) => {
+health.get("/", async (c) => {
   try {
     // Quick database ping
-    db.get(sql`SELECT 1`);
+    await db.get(sql`SELECT 1`);
 
     return c.json({
       status: "ok",
       timestamp: new Date().toISOString(),
-      uptime: process.uptime(),
+      runtime: "cloudflare-workers",
     });
   } catch {
     return c.json({ status: "error", message: "Database unreachable" }, 503);

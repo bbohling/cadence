@@ -29,7 +29,7 @@ export function KomCurrentRanks() {
   const queryClient = useQueryClient();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["kom-current-stats", USER_ID],
     queryFn: () => fetchCurrentKomStats(USER_ID),
   });

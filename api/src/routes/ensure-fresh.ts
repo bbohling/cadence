@@ -51,7 +51,7 @@ function parseTimestamp(value: string | null | undefined): number {
 
 ensureFresh.get("/:userId", async (c) => {
   const userId = c.req.param("userId");
-  const user = db.select().from(users).where(eq(users.name, userId)).get();
+  const user = await db.select().from(users).where(eq(users.name, userId)).get();
 
   if (!user) {
     return c.json({ error: "User not found" }, 404);
@@ -96,8 +96,8 @@ ensureFresh.get("/:userId", async (c) => {
   lastSyncFailed.delete(userId);
 
   const syncPromise = syncUser(userId)
-    .then(() => {
-      runNormalization();
+    .then(async () => {
+      await runNormalization();
       lastSyncFailed.delete(userId);
       log.info("Background sync + normalization complete", { userId });
     })
@@ -111,6 +111,9 @@ ensureFresh.get("/:userId", async (c) => {
     });
 
   activeSyncs.set(userId, syncPromise);
+  // On Workers, background work must be registered with waitUntil or it
+  // may be cancelled once the response is returned.
+  c.executionCtx.waitUntil(syncPromise);
 
   return c.json({ fresh: false, syncing: true, lastSyncAt: user.lastSyncAt });
 });
