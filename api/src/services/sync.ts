@@ -32,6 +32,14 @@ import { generateId, now } from "../utils/ids";
  *   2. Full — fetches all activities (used with bulk sync)
  */
 
+/**
+ * Strava's `after` parameter filters by activity START time, but
+ * `lastSyncAt` records when we last synced. A ride that starts before a
+ * sync runs and uploads after it would otherwise never be fetched.
+ * Looking back 48 hours closes that gap; upserts dedupe re-fetched rows.
+ */
+const SYNC_LOOKBACK_MS = 48 * 60 * 60 * 1000;
+
 // ── Types ──────────────────────────────────────────────
 
 interface SyncResult {
@@ -75,7 +83,7 @@ export async function syncUser(userId: string): Promise<SyncResult> {
         : new Date(user.lastSyncAt).getTime()
       : 0;
     const after = lastSyncMs > 0 && !Number.isNaN(lastSyncMs)
-      ? Math.floor(lastSyncMs / 1000)
+      ? Math.floor((lastSyncMs - SYNC_LOOKBACK_MS) / 1000)
       : undefined;
 
     log.info("Starting incremental sync", { userId, after });
