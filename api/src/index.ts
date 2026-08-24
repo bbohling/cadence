@@ -17,6 +17,7 @@ import { ensureFresh } from "./routes/ensure-fresh";
 import { syncUser } from "./services/sync";
 import { runNormalization } from "./services/normalize";
 import { refreshCurrentKoms } from "./services/kom-refresh";
+import { pruneOperationalLogs } from "./services/prune";
 
 /**
  * Cadence API — Hono on Cloudflare Workers.
@@ -125,6 +126,8 @@ async function runScheduled(cron: string): Promise<void> {
       log.info("KOM refresh cron starting", { userId });
       const result = await refreshCurrentKoms(userId);
       log.info("KOM refresh cron complete", { ...result });
+      // Piggyback the log retention sweep on the once-a-day cron.
+      await pruneOperationalLogs();
       break;
     }
     default:

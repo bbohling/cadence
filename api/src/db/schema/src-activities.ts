@@ -115,6 +115,7 @@ export const srcActivities = sqliteTable(
     index("idx_src_activities_athlete").on(table.athleteId),
     index("idx_src_activities_start_date").on(table.startDate),
     index("idx_src_activities_type").on(table.type),
+    index("idx_src_activities_updated_at").on(table.updatedAt),
   ]
 );
 

@@ -41,5 +41,6 @@ export {
   bulkSyncStates,
   bulkSyncSummaries,
   rateLimitLogs,
+  normalizeState,
 } from "./sync";
-export type { SyncLog, BulkSyncState, RateLimitLog } from "./sync";
+export type { SyncLog, BulkSyncState, RateLimitLog, NormalizeState } from "./sync";

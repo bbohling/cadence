@@ -68,6 +68,7 @@ export const srcSegmentEfforts = sqliteTable(
     index("idx_src_efforts_kom_rank").on(table.komRank),
     index("idx_src_efforts_pr_rank").on(table.prRank),
     index("idx_src_efforts_start_date").on(table.startDate),
+    index("idx_src_efforts_updated_at").on(table.updatedAt),
   ]
 );
 
