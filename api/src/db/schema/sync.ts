@@ -111,6 +111,30 @@ export const rateLimitLogs = sqliteTable(
   ]
 );
 
+
+/**
+ * normalize_state — Watermarks for the incremental normalization pass.
+ *
+ * One row per source table. `watermark` holds the highest
+ * `src_*.updated_at` value that has been normalized, as an ISO 8601
+ * string (see `now()` in src/utils/ids.ts — always UTC, so plain string
+ * comparison is chronological).
+ *
+ * Before this existed, each normalization run found dirty rows with a
+ * cross-table left join (`activities.updated_at < src_activities.updated_at`),
+ * which no index can serve — so every hourly cron scanned both source
+ * tables in full whether or not anything had changed. The watermark turns
+ * that into an indexed range scan that reads nothing on an idle run.
+ */
+export const normalizeState = sqliteTable("normalize_state", {
+  /** 'activities' | 'segment_efforts' | 'gears' */
+  key: text("key").primaryKey(),
+  /** Highest src updated_at normalized so far ('' = nothing yet) */
+  watermark: text("watermark").notNull().default(""),
+  updatedAt: text("updated_at").notNull(),
+});
+
 export type SyncLog = typeof syncLogs.$inferSelect;
 export type BulkSyncState = typeof bulkSyncStates.$inferSelect;
 export type RateLimitLog = typeof rateLimitLogs.$inferSelect;
+export type NormalizeState = typeof normalizeState.$inferSelect;

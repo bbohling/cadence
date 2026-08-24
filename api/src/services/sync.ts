@@ -198,15 +198,21 @@ export async function syncUser(userId: string): Promise<SyncResult> {
 async function upsertActivity(
   detail: StravaDetailedActivity,
   athleteId: number
-): Promise<"added" | "updated"> {
+): Promise<"added" | "updated" | "unchanged"> {
   const existing = await db
-    .select({ id: srcActivities.id })
+    .select({ id: srcActivities.id, rawJson: srcActivities.rawJson })
     .from(srcActivities)
     .where(eq(srcActivities.id, detail.id))
     .get();
 
   const timestamp = now();
   const rawJson = JSON.stringify(detail);
+
+  // The 48-hour lookback re-fetches the same recent activities every hour.
+  // Writing them back unconditionally bumped `updated_at`, which then made
+  // the normalization pass treat them as dirty and re-run the KOM/PR
+  // recompute — churn, every hour, over data that had not changed.
+  if (existing && existing.rawJson === rawJson) return "unchanged";
 
   const values = {
     id: detail.id,
@@ -280,17 +286,22 @@ async function upsertSegmentEfforts(
 
   for (const effort of efforts) {
     const existing = await db
-      .select({ id: srcSegmentEfforts.id })
+      .select({ id: srcSegmentEfforts.id, rawJson: srcSegmentEfforts.rawJson })
       .from(srcSegmentEfforts)
       .where(eq(srcSegmentEfforts.id, effort.id))
       .get();
+
+    const rawJson = JSON.stringify(effort);
+    // Same reason as upsertActivity: don't rewrite unchanged efforts and
+    // drag them back through normalization every hour.
+    if (existing && existing.rawJson === rawJson) continue;
 
     const values = {
       id: effort.id,
       activityId,
       segmentId: effort.segment.id,
       athleteId,
-      rawJson: JSON.stringify(effort),
+      rawJson,
       name: effort.name,
       elapsedTime: effort.elapsed_time,
       movingTime: effort.moving_time,
