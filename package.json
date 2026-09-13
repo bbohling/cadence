@@ -1,0 +1,16 @@
+{
+  "name": "cadence",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "//": "Launcher only. api/ and ui/ keep their own package.json + bun.lock — CI installs in each subdirectory, so this must NOT declare workspaces.",
+  "scripts": {
+    "dev": "bun scripts/dev.mjs",
+    "dev:api": "bun run --cwd api dev",
+    "dev:ui": "bun run --cwd ui dev",
+    "install:all": "bun install --cwd api && bun install --cwd ui",
+    "db:local:setup": "bun scripts/seed-local-d1.mjs",
+    "typecheck": "bun run --cwd api typecheck",
+    "build": "bun run --cwd ui build"
+  }
+}

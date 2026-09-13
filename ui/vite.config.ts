@@ -4,6 +4,13 @@ import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 
 /**
+ * API dev port. Must match api/wrangler.jsonc's `dev.port`. Deliberately not
+ * 8787 — the bigmini Bookshelf container owns that port on this machine.
+ */
+const API_PORT = process.env.API_PORT ?? "8014";
+const WEB_PORT = Number(process.env.WEB_PORT ?? 5173);
+
+/**
  * Vite configuration.
  *
  * - React plugin for JSX/fast-refresh
@@ -19,10 +26,10 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    port: WEB_PORT,
     proxy: {
       "/api": {
-        target: "http://localhost:8787", // wrangler dev
+        target: `http://localhost:${API_PORT}`, // wrangler dev
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/api/, ""),
       },

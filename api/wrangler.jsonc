@@ -44,6 +44,14 @@
     "crons": ["5 * * * *", "0 12 * * *"]
   },
 
+  // Local dev port. NOT 8787 (wrangler's default) — the Bookshelf container in
+  // the bigmini big_mini_m4 stack already binds it on this machine, and both
+  // bind successfully, so requests go to whichever won. 8014 is the backend
+  // slot in PORTS.md's 8010-8099 dev band. Override: `wrangler dev --port N`.
+  "dev": {
+    "port": 8014
+  },
+
   "observability": {
     "enabled": true
   }

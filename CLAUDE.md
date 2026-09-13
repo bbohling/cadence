@@ -12,9 +12,23 @@ Production: UI at `https://cadence.bbohling.com` (Pages custom domain); API serv
 
 ## Development Commands
 
+### Both at once (repo root)
+```bash
+bun run db:local:setup   # ONE TIME: seed the local D1 replica (~1 min)
+bun run dev              # API + UI together, opens a browser when both answer
+```
+
+`scripts/dev.mjs` runs both, prefixes their logs, and stops both on Ctrl-C. It
+refuses to start on a port conflict or an unseeded replica rather than letting
+you debug the symptoms. Override ports: `API_PORT=8015 WEB_PORT=5174 bun run dev`.
+
+The root `package.json` is a launcher only — **it must not declare workspaces**,
+because CI runs `bun install --frozen-lockfile` inside `api/` and `ui/`
+separately against their own lockfiles.
+
 ### API (`cd api`)
 ```bash
-bun run dev          # wrangler dev on http://localhost:8787 (local D1 replica)
+bun run dev          # wrangler dev on http://localhost:8014 (local D1 replica)
 bun run typecheck    # tsc --noEmit
 bun run deploy       # wrangler deploy (normally CI does this)
 bun run db:generate  # Generate Drizzle migration SQL from schema changes
@@ -22,7 +36,25 @@ npx wrangler d1 execute cadence --local --file <dump.sql>    # seed local D1
 npx wrangler d1 execute cadence --remote --command "..."     # query prod D1
 ```
 
-Local secrets go in `api/.dev.vars` (gitignored): `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`.
+Local secrets live in `api/.env` (gitignored) — wrangler ≥ 4.10 loads `.env`
+automatically and logs `Using secrets defined in .env` at startup. (`.dev.vars`
+still works if you prefer it.) Needed: `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`.
+
+**Port 8014, not wrangler's default 8787.** The Bookshelf container in the
+bigmini `big_mini_m4` stack already binds 8787 on this machine. Both processes
+bind without error — Docker takes `*:8787`, workerd takes `127.0.0.1:8787` — so
+requests reach whichever won and the API intermittently returns Bookshelf's
+HTML. 8014 is the backend slot in bigmini's `PORTS.md` dev band.
+
+### Local D1 replica
+
+`wrangler dev` starts against an **empty** local D1: the binding exists but has
+no tables. `/health` returns 200 because it never touches the database, while
+every data route 500s with `Failed query: select ... from "users"`. Fix with
+`bun run db:local:setup` from the root, which resets the replica, imports
+`api/data/cadence-d1-dump.sql`, then replays the migrations taken after the dump
+was captured (currently `0002`, `0003`). Add new ones to `MIGRATIONS_AFTER_DUMP`
+in `scripts/seed-local-d1.mjs`, or re-export the dump.
 
 ### UI (`cd ui`)
 ```bash
@@ -30,11 +62,14 @@ bun run dev    # Vite dev server on http://localhost:5173
 bun run build  # TypeScript check + production build
 ```
 
+Vite's `/api` proxy target follows `API_PORT` (default 8014) — keep it in step
+with `dev.port` in `api/wrangler.jsonc`.
+
 ### Cron handlers (local testing)
 ```bash
 cd api && npx wrangler dev --test-scheduled
-curl "http://localhost:8787/cdn-cgi/handler/scheduled?cron=5+*+*+*+*"   # hourly sync + normalize
-curl "http://localhost:8787/cdn-cgi/handler/scheduled?cron=0+12+*+*+*"  # daily KOM refresh
+curl "http://localhost:8014/cdn-cgi/handler/scheduled?cron=5+*+*+*+*"   # hourly sync + normalize
+curl "http://localhost:8014/cdn-cgi/handler/scheduled?cron=0+12+*+*+*"  # daily KOM refresh
 ```
 
 ## Deployment
@@ -95,7 +130,7 @@ The UI calls the API via `ui/src/lib/api.ts`, which is the single source of trut
 ### Environment Variables
 - Worker vars (`api/wrangler.jsonc` → `vars`): `NODE_ENV`, `CORS_ORIGIN` (only relevant for cross-origin/dev use — production is same-origin)
 - Worker secrets (`wrangler secret put`): `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`
-- Local dev secrets: `api/.dev.vars`
+- Local dev secrets: `api/.env` (wrangler auto-loads it; `.dev.vars` also works)
 
 ### Path Alias
 `@/` maps to `ui/src/` (configured in `vite.config.ts`).
