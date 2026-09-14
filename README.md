@@ -82,35 +82,34 @@ is frozen at the time each activity was synced.
 ### Setup
 
 ```bash
-# API
-cd api
-bun install
-# Local secrets for `wrangler dev` (gitignored):
-printf "STRAVA_CLIENT_ID=...\nSTRAVA_CLIENT_SECRET=...\n" > .dev.vars
-# Seed the local D1 replica (from a dump — see Data Operations below)
-npx wrangler d1 execute cadence --local --file <dump.sql>
+# Dependencies (api/ and ui/ each have their own package.json + lockfile)
+bun run install:all
 
-# UI
-cd ../ui
-bun install
+# Local secrets for `wrangler dev` (gitignored) — wrangler auto-loads api/.env:
+printf "STRAVA_CLIENT_ID=...\nSTRAVA_CLIENT_SECRET=...\n" >> api/.env
+
+# Seed the local D1 replica. Required — wrangler dev starts against an EMPTY
+# D1, and without this every data route 500s while /health stays green.
+bun run db:local:setup
 ```
 
 ### Development
 
 ```bash
-# Terminal 1: API (wrangler dev, local D1 replica)
-cd api && bun run dev        # http://localhost:8787
+# Both, from the repo root — opens a browser once each side answers
+bun run dev                  # api :8014, ui :5173
 
-# Terminal 2: UI
-cd ui && bun run dev         # http://localhost:5173 (proxies /api)
+# Or one at a time
+cd api && bun run dev        # http://localhost:8014
+cd ui  && bun run dev        # http://localhost:5173 (proxies /api to :8014)
 ```
 
 To exercise the cron handlers locally:
 
 ```bash
 cd api && npx wrangler dev --test-scheduled
-curl "http://localhost:8787/cdn-cgi/handler/scheduled?cron=5+*+*+*+*"   # hourly sync
-curl "http://localhost:8787/cdn-cgi/handler/scheduled?cron=0+12+*+*+*"  # KOM refresh
+curl "http://localhost:8014/cdn-cgi/handler/scheduled?cron=5+*+*+*+*"   # hourly sync
+curl "http://localhost:8014/cdn-cgi/handler/scheduled?cron=0+12+*+*+*"  # KOM refresh
 ```
 
 ## Deployment (CI/CD)
