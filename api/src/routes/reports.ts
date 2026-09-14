@@ -9,6 +9,7 @@ import {
   getActivityTypeBreakdown,
   getKomPrTimeline,
   getInfographicStats,
+  getRecentRides,
 } from "../services/reports";
 
 /**
@@ -62,6 +63,13 @@ reports.get("/gear-usage/:userId", async (c) => {
 reports.get("/activity-type/:userId", async (c) => {
   const athleteId = await resolveAthleteId(c.req.param("userId"));
   return c.json(await getActivityTypeBreakdown(athleteId));
+});
+
+// GET /reports/recent-rides/:userId?limit=5
+reports.get("/recent-rides/:userId", async (c) => {
+  const athleteId = await resolveAthleteId(c.req.param("userId"));
+  const limit = Math.min(Math.max(Number(c.req.query("limit")) || 5, 1), 50);
+  return c.json(await getRecentRides(athleteId, limit));
 });
 
 // GET /reports/kom-pr-achievements/:userId

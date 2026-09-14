@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import { PieChart, Pie, Cell } from "recharts";
 import { fetchYearOverYear } from "@/lib/api";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ProgressRing } from "@/components/ui/progress-ring";
 import { formatNumber, formatDuration } from "@/lib/utils";
 
 /**
@@ -13,6 +13,8 @@ import { formatNumber, formatDuration } from "@/lib/utils";
  *
  * Each ring shows the current year's progress as a percentage of
  * what was achieved by the same date last year.
+ *
+ * Mobile: three rings per row (3 + 2, centered). sm+: one row of five.
  */
 
 const USER_ID = "brandon";
@@ -42,9 +44,11 @@ export function YearProgressRings() {
       <Card>
         <CardHeader><CardTitle>Year Progress</CardTitle></CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div className="flex flex-wrap justify-center gap-y-4">
             {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-40 w-full" />
+              <div key={i} className="basis-1/3 sm:basis-1/5 flex justify-center">
+                <Skeleton className="h-32 sm:h-40 w-20 sm:w-28" />
+              </div>
             ))}
           </div>
         </CardContent>
@@ -111,9 +115,9 @@ export function YearProgressRings() {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+        <div className="flex flex-wrap justify-center gap-y-5">
           {metrics.map((metric) => (
-            <ProgressRing key={metric.label} metric={metric} />
+            <ProgressRingStat key={metric.label} metric={metric} />
           ))}
         </div>
       </CardContent>
@@ -121,55 +125,35 @@ export function YearProgressRings() {
   );
 }
 
-function ProgressRing({ metric }: { metric: RingMetric }) {
+function ProgressRingStat({ metric }: { metric: RingMetric }) {
   const { label, currentValue, lastYearValue, format } = metric;
 
   // Avoid division by zero
   const pct = lastYearValue > 0 ? (currentValue / lastYearValue) * 100 : 0;
-  const displayPct = Math.min(pct, 100); // Cap at 100 for the ring visual
   const isOverflow = pct > 100;
 
-  const ringData = [
-    { value: displayPct },
-    { value: 100 - displayPct },
-  ];
-
   return (
-    <div className="flex flex-col items-center gap-1">
-      <div className="relative w-28 h-28 sm:w-32 sm:h-32">
-        <PieChart width={128} height={128}>
-            <Pie
-              data={ringData}
-              cx="50%"
-              cy="50%"
-              innerRadius="70%"
-              outerRadius="90%"
-              startAngle={90}
-              endAngle={-270}
-              dataKey="value"
-              stroke="none"
-            >
-              <Cell fill={isOverflow ? OVERFLOW_COLOR : PROGRESS_COLOR} />
-              <Cell fill={TRACK_COLOR} />
-            </Pie>
-        </PieChart>
+    <div className="basis-1/3 sm:basis-1/5 flex flex-col items-center gap-1 px-1">
+      <ProgressRing
+        percent={pct}
+        strokeWidth={11}
+        color={isOverflow ? OVERFLOW_COLOR : PROGRESS_COLOR}
+        trackColor={TRACK_COLOR}
+        className="w-20 h-20 sm:w-28 sm:h-28 lg:w-32 lg:h-32"
+      >
+        <span className="text-base sm:text-xl font-bold text-white tabular-nums">
+          {Math.round(pct)}%
+        </span>
+      </ProgressRing>
 
-        {/* Center text */}
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-lg sm:text-xl font-bold text-white">
-            {Math.round(pct)}%
-          </span>
-        </div>
-      </div>
-
-      <div className="text-center">
-        <div className="text-xs font-medium text-slate-400 uppercase tracking-wider">
+      <div className="text-center min-w-0">
+        <div className="text-[10px] sm:text-xs font-medium text-slate-400 uppercase tracking-wider">
           {label}
         </div>
-        <div className="text-sm font-semibold text-white">
+        <div className="text-sm font-semibold text-white tabular-nums">
           {format(currentValue)}
         </div>
-        <div className="text-xs text-slate-500">
+        <div className="text-[11px] sm:text-xs text-slate-500 tabular-nums">
           of {format(lastYearValue)}
         </div>
       </div>

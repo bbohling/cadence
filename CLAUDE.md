@@ -123,7 +123,7 @@ Scheduled work runs in the Worker's `scheduled()` handler (`api/src/index.ts`), 
 All routes follow `/v1/<resource>`. The userId in URL paths identifies the Strava athlete. Route files: `reports.ts`, `koms.ts`, `sync.ts`, `ensure-fresh.ts`, `health.ts`. On the custom domain every path is prefixed with `/api`.
 
 ### UI Routing
-TanStack Router with manual route tree (`ui/src/routes/-route-tree.ts`). Pages: `dashboard.tsx`, `rings.tsx`, `pixels.tsx`, `infographic.tsx`. The root layout is in `root-layout.tsx`.
+TanStack Router with manual route tree (`ui/src/routes/-route-tree.ts`). Pages: `dashboard.tsx`, `rings.tsx`, `pixels.tsx`, `infographic.tsx`, `plash.tsx`. The root layout is in `root-layout.tsx`; `/rings` and `/plash` are ambient displays rendered without nav (`BARE_PATHS`) and aren't linked from anywhere — `/plash` is a full-screen yearly-highlights wallpaper for the Plash macOS app (`?year=YYYY` for a past year).
 
 The UI calls the API via `ui/src/lib/api.ts`, which is the single source of truth for all typed API response interfaces. Production builds use `VITE_API_URL=/api` (same-origin). In dev, Vite proxies `/api` to the local API.
 

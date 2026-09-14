@@ -59,9 +59,9 @@ export function KomPlaceCounts() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Medal className="w-4 h-4 text-gold" />
+          <Medal className="w-4 h-4 text-gold shrink-0" />
           KOM Historic Rankings
-          <span className="text-slate-500 font-normal text-xs normal-case tracking-normal">
+          <span className="hidden sm:inline text-slate-500 font-normal text-xs normal-case tracking-normal">
             (at time of sync)
           </span>
         </CardTitle>

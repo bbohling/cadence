@@ -19,6 +19,9 @@ import { Sun, Moon } from "lucide-react";
  *   - Text-based yearly stats
  *   - Monospace KOM table
  *   - CRT-style scanline effects (subtle)
+ *
+ * Mobile: progress bars drop to their own line under the label, and the
+ * tables lose their least important column rather than scrolling sideways.
  */
 
 const USER_ID = "brandon";
@@ -33,7 +36,7 @@ export function PixelsPage() {
         "font-mono text-sm transition-colors duration-300 animate-fade-in",
         theme === "dark"
           ? "text-green-400"
-          : "text-slate-800"
+          : "text-slate-800 bg-slate-100 -mx-3 px-3 py-4 sm:mx-0 sm:px-6 sm:rounded-xl"
       )}
     >
       {/* Theme toggle */}
@@ -41,7 +44,7 @@ export function PixelsPage() {
         <button
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           className={cn(
-            "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors",
+            "flex items-center gap-2 px-3 py-2 sm:py-1.5 rounded-lg text-xs font-medium border transition-colors",
             theme === "dark"
               ? "border-green-800 text-green-400 hover:bg-green-900/30"
               : "border-slate-300 text-slate-600 hover:bg-slate-100"
@@ -69,14 +72,22 @@ export function PixelsPage() {
 
 // ── Header ─────────────────────────────────────────────
 
+const HEADER_WIDTH = 38;
+
+/** Pad a line to the inside width of the header box */
+const boxLine = (text: string) => `║  ${text.padEnd(HEADER_WIDTH - 2).slice(0, HEADER_WIDTH - 2)}║`;
+
 function AsciiHeader() {
+  const date = new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
   return (
-    <pre className="text-xs leading-tight">
-{`╔══════════════════════════════════════╗
-║  CADENCE // CYCLING DASHBOARD        ║
-║  ================================    ║
-║  ${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}.             ║
-╚══════════════════════════════════════╝`}
+    <pre className="text-[11px] sm:text-xs leading-tight overflow-x-auto">
+{[
+  `╔${"═".repeat(HEADER_WIDTH)}╗`,
+  boxLine("CADENCE // CYCLING DASHBOARD"),
+  boxLine("================================"),
+  boxLine(date),
+  `╚${"═".repeat(HEADER_WIDTH)}╝`,
+].join("\n")}
     </pre>
   );
 }
@@ -112,19 +123,21 @@ function AsciiProgressBars({ theme }: { theme: "dark" | "light" }) {
       <div className="text-xs mb-2 opacity-60">
         ── {current.year} vs {lastYear.year} (through {new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}) ──
       </div>
-      <div className="space-y-2">
+      <div className="space-y-3 sm:space-y-2">
         {metrics.map(({ label, curr, prev, fmt }) => {
           const pct = prev > 0 ? Math.min((curr / prev) * 100, 150) : 0;
           const filled = Math.round((pct / 150) * barWidth);
           const bar = "█".repeat(filled) + "░".repeat(barWidth - filled);
 
           return (
-            <div key={label}>
-              <span className="opacity-60">{label} </span>
-              <span>[{bar}]</span>
-              <span className="opacity-60"> {Math.round(pct)}% </span>
-              <span>{fmt(curr)}</span>
-              <span className="opacity-40"> / {fmt(prev)}</span>
+            <div key={label} className="flex flex-wrap items-baseline gap-x-2 whitespace-pre">
+              <span className="opacity-60">{label}</span>
+              <span className="order-last basis-full text-xs sm:text-sm sm:order-none sm:basis-auto">
+                [{bar}]<span className="opacity-60"> {Math.round(pct)}%</span>
+              </span>
+              <span className="ml-auto sm:ml-0">
+                {fmt(curr)}<span className="opacity-40"> / {fmt(prev)}</span>
+              </span>
             </div>
           );
         })}
@@ -152,26 +165,23 @@ function AsciiYearlyStats({ theme }: { theme: "dark" | "light" }) {
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
-            <tr className="opacity-60">
-              <th className="text-left pr-4">YEAR</th>
-              <th className="text-right pr-4">MILES</th>
-              <th className="text-right pr-4">RIDES</th>
-              <th className="text-right pr-4">CLIMB</th>
-              <th className="text-right pr-4">CALS</th>
-              <th className="text-right">TIME</th>
-            </tr>
-            <tr>
-              <td colSpan={6} className="opacity-30">{"─".repeat(60)}</td>
+            <tr className="opacity-60 border-b border-dashed border-current">
+              <th className="text-left pr-3 sm:pr-4 pb-1">YEAR</th>
+              <th className="text-right pr-3 sm:pr-4 pb-1">MILES</th>
+              <th className="text-right pr-3 sm:pr-4 pb-1">RIDES</th>
+              <th className="text-right pr-3 sm:pr-4 pb-1">CLIMB</th>
+              <th className="text-right pr-4 pb-1 hidden sm:table-cell">CALS</th>
+              <th className="text-right pb-1">TIME</th>
             </tr>
           </thead>
           <tbody>
             {data.map((year) => (
               <tr key={year.year}>
-                <td className="pr-4">{year.year}</td>
-                <td className="text-right pr-4 tabular-nums">{formatNumber(year.totalDistance, 0)}</td>
-                <td className="text-right pr-4 tabular-nums">{year.totalRides}</td>
-                <td className="text-right pr-4 tabular-nums">{formatNumber(year.totalElevation, 0)}</td>
-                <td className="text-right pr-4 tabular-nums">{formatNumber(year.totalCalories, 0)}</td>
+                <td className="pr-3 sm:pr-4 pt-1">{year.year}</td>
+                <td className="text-right pr-3 sm:pr-4 tabular-nums">{formatNumber(year.totalDistance, 0)}</td>
+                <td className="text-right pr-3 sm:pr-4 tabular-nums">{year.totalRides}</td>
+                <td className="text-right pr-3 sm:pr-4 tabular-nums">{formatNumber(year.totalElevation, 0)}</td>
+                <td className="text-right pr-4 tabular-nums hidden sm:table-cell">{formatNumber(year.totalCalories, 0)}</td>
                 <td className="text-right tabular-nums">{formatDuration(year.totalMovingTime)}</td>
               </tr>
             ))}
@@ -212,23 +222,23 @@ function AsciiKomTable({ theme }: { theme: "dark" | "light" }) {
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
-            <tr className="opacity-60">
-              <th className="text-center pr-2">RK</th>
-              <th className="text-left pr-4">SEGMENT</th>
-              <th className="text-right pr-4">TIME</th>
-              <th className="text-right">DATE</th>
-            </tr>
-            <tr>
-              <td colSpan={4} className="opacity-30">{"─".repeat(60)}</td>
+            <tr className="opacity-60 border-b border-dashed border-current">
+              <th className="text-center pr-2 pb-1">RK</th>
+              <th className="text-left pr-3 sm:pr-4 pb-1">SEGMENT</th>
+              <th className="text-right pr-0 sm:pr-4 pb-1">TIME</th>
+              <th className="text-right pb-1 hidden sm:table-cell">DATE</th>
             </tr>
           </thead>
           <tbody>
             {data.data.map((kom) => (
               <tr key={kom.id}>
-                <td className="text-center pr-2">{rankSymbol(kom.komRank)}</td>
-                <td className="pr-4 truncate max-w-[200px]">{kom.segmentName}</td>
-                <td className="text-right pr-4 tabular-nums">{formatTime(kom.elapsedTime)}</td>
-                <td className="text-right tabular-nums opacity-60">
+                <td className="text-center pr-2 pt-1">{rankSymbol(kom.komRank)}</td>
+                {/* w-full + max-w-0 lets truncate work inside an auto-layout table */}
+                <td className="pr-3 sm:pr-4 w-full max-w-0">
+                  <div className="truncate">{kom.segmentName}</div>
+                </td>
+                <td className="text-right pr-0 sm:pr-4 tabular-nums">{formatTime(kom.elapsedTime)}</td>
+                <td className="text-right tabular-nums opacity-60 hidden sm:table-cell">
                   {new Date(kom.startDate).toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "2-digit" })}
                 </td>
               </tr>
@@ -239,19 +249,19 @@ function AsciiKomTable({ theme }: { theme: "dark" | "light" }) {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between mt-3 pt-2 border-t border-current opacity-30">
+        <div className="flex items-center justify-between mt-3 pt-1 border-t border-dashed border-current/30 text-xs">
           <button
             onClick={() => setPage((p) => Math.max(0, p - 1))}
             disabled={page === 0}
-            className="hover:opacity-100 transition-opacity disabled:opacity-20"
+            className="py-2 pr-2 opacity-60 hover:opacity-100 transition-opacity disabled:opacity-20"
           >
             [&lt; PREV]
           </button>
-          <span>PAGE {page + 1}/{totalPages}</span>
+          <span className="opacity-40">PAGE {page + 1}/{totalPages}</span>
           <button
             onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
             disabled={page >= totalPages - 1}
-            className="hover:opacity-100 transition-opacity disabled:opacity-20"
+            className="py-2 pl-2 opacity-60 hover:opacity-100 transition-opacity disabled:opacity-20"
           >
             [NEXT &gt;]
           </button>
