@@ -4,6 +4,7 @@ import { DashboardPage } from "./dashboard";
 import { PixelsPage } from "./pixels";
 import { RingsPage } from "./rings";
 import { InfographicPage } from "./infographic";
+import { PlashPage } from "./plash";
 
 /**
  * Route tree definition.
@@ -17,6 +18,7 @@ import { InfographicPage } from "./infographic";
  *   /pixels       → ASCII/terminal-style dashboard
  *   /rings        → Compact progress rings overlay
  *   /infographic  → Year-in-review infographic generator
+ *   /plash        → Yearly highlights wallpaper for Plash (hidden, no nav)
  */
 
 // Root layout wraps all routes
@@ -52,9 +54,17 @@ const infographicRoute = createRoute({
   component: InfographicPage,
 });
 
+// Desktop wallpaper (Plash) — deliberately not linked from the nav
+const plashRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/plash",
+  component: PlashPage,
+});
+
 export const routeTree = rootRoute.addChildren([
   indexRoute,
   pixelsRoute,
   ringsRoute,
   infographicRoute,
+  plashRoute,
 ]);
