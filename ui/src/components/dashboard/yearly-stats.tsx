@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchYearlyStats, type YearlyStats } from "@/lib/api";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -12,6 +13,9 @@ import { formatNumber, formatDuration, cn } from "@/lib/utils";
  *
  * Each metric shows bars proportional to the best year, with
  * the best year highlighted. Clean, information-dense layout.
+ *
+ * Mobile shows one metric at a time behind a pill selector — five
+ * stacked charts with a row per year is a lot of scrolling.
  */
 
 const USER_ID = "brandon";
@@ -32,6 +36,7 @@ const METRICS: MetricConfig[] = [
 ];
 
 export function YearlyStatsChart() {
+  const [selected, setSelected] = useState<keyof YearlyStats>("totalDistance");
   const { data, isLoading, error } = useQuery({
     queryKey: ["yearly-stats", USER_ID],
     queryFn: () => fetchYearlyStats(USER_ID),
@@ -67,9 +72,29 @@ export function YearlyStatsChart() {
     <Card>
       <CardHeader><CardTitle>Over the Years</CardTitle></CardHeader>
       <CardContent>
+        {/* Metric picker — mobile only */}
+        <div className="sm:hidden -mx-4 px-4 mb-4 flex gap-1.5 overflow-x-auto [scrollbar-width:none]">
+          {METRICS.map((metric) => (
+            <button
+              key={metric.key}
+              onClick={() => setSelected(metric.key)}
+              className={cn(
+                "shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors",
+                selected === metric.key
+                  ? "bg-brand-500/15 border-brand-500/40 text-brand-300"
+                  : "border-slate-800 text-slate-400 active:bg-slate-800"
+              )}
+            >
+              {metric.label}
+            </button>
+          ))}
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
           {METRICS.map((metric) => (
-            <MetricChart key={metric.key} metric={metric} data={data} />
+            <div key={metric.key} className={cn(selected !== metric.key && "hidden sm:block")}>
+              <MetricChart metric={metric} data={data} />
+            </div>
           ))}
         </div>
       </CardContent>
@@ -92,7 +117,7 @@ function MetricChart({
 
   return (
     <div>
-      <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
+      <h4 className="hidden sm:block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
         {metric.label}
       </h4>
       <div className="space-y-1.5">
@@ -106,7 +131,7 @@ function MetricChart({
               <span className="text-xs text-slate-500 w-10 text-right tabular-nums shrink-0">
                 {yearData.year}
               </span>
-              <div className="flex-1 h-5 bg-slate-800/50 rounded overflow-hidden">
+              <div className="flex-1 min-w-0 h-5 bg-slate-800/50 rounded overflow-hidden">
                 <div
                   className={cn(
                     "h-full rounded transition-all duration-300",
@@ -119,7 +144,7 @@ function MetricChart({
               </div>
               <span
                 className={cn(
-                  "text-xs tabular-nums w-20 text-right shrink-0",
+                  "text-xs tabular-nums w-[4.5rem] sm:w-20 text-right shrink-0",
                   isBest ? "text-brand-400 font-semibold" : "text-slate-500"
                 )}
               >

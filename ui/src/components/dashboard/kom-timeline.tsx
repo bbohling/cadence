@@ -11,6 +11,9 @@ import { ChevronLeft, ChevronRight, Trophy } from "lucide-react";
  *
  * Shows segment name, activity name, time, rank, and date.
  * Rank is displayed with medal colors (gold/silver/bronze).
+ *
+ * Mobile renders a compact list instead of the table so segment names
+ * get the full width rather than truncating to a few characters.
  */
 
 const USER_ID = "brandon";
@@ -58,8 +61,15 @@ export function KomTimeline() {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        {/* Table */}
-        <div className="overflow-x-auto -mx-5">
+        {/* List — mobile */}
+        <ul className="sm:hidden -mx-4 divide-y divide-slate-800/60 border-y border-slate-800/60">
+          {data.data.map((kom) => (
+            <KomListItem key={kom.id} kom={kom} />
+          ))}
+        </ul>
+
+        {/* Table — sm+ */}
+        <div className="hidden sm:block overflow-x-auto -mx-5">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-800">
@@ -95,7 +105,7 @@ export function KomTimeline() {
               onClick={() => setPage((p) => Math.max(0, p - 1))}
               disabled={page === 0}
               className={cn(
-                "flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                "flex items-center gap-1 px-3 py-2.5 sm:py-1.5 rounded-lg text-sm font-medium transition-colors",
                 page === 0
                   ? "text-slate-600 cursor-not-allowed"
                   : "text-slate-400 hover:text-white hover:bg-slate-800"
@@ -113,7 +123,7 @@ export function KomTimeline() {
               onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
               disabled={page >= totalPages - 1}
               className={cn(
-                "flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                "flex items-center gap-1 px-3 py-2.5 sm:py-1.5 rounded-lg text-sm font-medium transition-colors",
                 page >= totalPages - 1
                   ? "text-slate-600 cursor-not-allowed"
                   : "text-slate-400 hover:text-white hover:bg-slate-800"
@@ -129,13 +139,55 @@ export function KomTimeline() {
   );
 }
 
-function KomRow({ kom }: { kom: KomAchievement }) {
-  const rankColors: Record<number, string> = {
-    1: "text-gold",
-    2: "text-silver",
-    3: "text-bronze",
-  };
+const RANK_COLORS: Record<number, string> = {
+  1: "text-gold",
+  2: "text-silver",
+  3: "text-bronze",
+};
 
+function RankBadge({ rank }: { rank: number }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold shrink-0",
+        RANK_COLORS[rank] ?? "text-slate-400",
+        rank <= 3 ? "bg-slate-800" : ""
+      )}
+    >
+      {rank}
+    </span>
+  );
+}
+
+function KomListItem({ kom }: { kom: KomAchievement }) {
+  const formattedDate = new Date(kom.startDate).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  const location = kom.segmentCity
+    ? `${kom.segmentCity}${kom.segmentState ? `, ${kom.segmentState}` : ""}`
+    : null;
+
+  return (
+    <li className="flex items-center gap-3 px-4 py-3">
+      <RankBadge rank={kom.komRank} />
+      <div className="min-w-0 flex-1">
+        <div className="font-medium text-white text-sm leading-snug line-clamp-2">
+          {kom.segmentName}
+        </div>
+        <div className="text-xs text-slate-500 mt-0.5 truncate">
+          {[location, formattedDate].filter(Boolean).join(" · ")}
+        </div>
+      </div>
+      <div className="text-sm text-slate-300 tabular-nums shrink-0">
+        {formatTime(kom.elapsedTime)}
+      </div>
+    </li>
+  );
+}
+
+function KomRow({ kom }: { kom: KomAchievement }) {
   const formattedDate = new Date(kom.startDate).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -161,15 +213,7 @@ function KomRow({ kom }: { kom: KomAchievement }) {
         {formatTime(kom.elapsedTime)}
       </td>
       <td className="px-3 py-2.5 text-center">
-        <span
-          className={cn(
-            "inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold",
-            rankColors[kom.komRank] ?? "text-slate-400",
-            kom.komRank <= 3 ? "bg-slate-800" : ""
-          )}
-        >
-          {kom.komRank}
-        </span>
+        <RankBadge rank={kom.komRank} />
       </td>
       <td className="px-5 py-2.5 text-right text-slate-500 text-xs tabular-nums hidden md:table-cell">
         {formattedDate}

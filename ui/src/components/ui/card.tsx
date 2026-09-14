@@ -28,7 +28,7 @@ export function Card({ className, children }: CardProps) {
 
 export function CardHeader({ className, children }: CardProps) {
   return (
-    <div className={cn("px-5 pt-5 pb-2", className)}>
+    <div className={cn("px-4 pt-4 pb-2 sm:px-5 sm:pt-5", className)}>
       {children}
     </div>
   );
@@ -49,5 +49,5 @@ export function CardTitle({
 }
 
 export function CardContent({ className, children }: CardProps) {
-  return <div className={cn("px-5 pb-5", className)}>{children}</div>;
+  return <div className={cn("px-4 pb-4 sm:px-5 sm:pb-5", className)}>{children}</div>;
 }

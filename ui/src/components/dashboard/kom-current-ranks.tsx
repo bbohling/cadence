@@ -88,15 +88,15 @@ export function KomCurrentRanks() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Crown className="w-4 h-4 text-yellow-400" />
+          <Crown className="w-4 h-4 text-yellow-400 shrink-0" />
           Current KOMs
-          <span className="text-slate-500 font-normal text-xs normal-case tracking-normal">
+          <span className="text-slate-500 font-normal text-xs normal-case tracking-normal truncate">
             (live from Strava)
           </span>
           <button
             onClick={handleRefresh}
             disabled={isRefreshing || refreshMutation.isPending}
-            className="ml-auto p-1.5 rounded-md hover:bg-slate-700/50 transition-colors text-slate-400 hover:text-white disabled:opacity-50"
+            className="ml-auto -my-2 -mr-2 p-2.5 sm:p-1.5 sm:my-0 sm:mr-0 rounded-md hover:bg-slate-700/50 transition-colors text-slate-400 hover:text-white disabled:opacity-50"
             title={isRefreshing ? "Refresh in progress..." : "Refresh KOMs from Strava"}
           >
             <RefreshCw className={cn("w-3.5 h-3.5", isRefreshing && "animate-spin")} />
