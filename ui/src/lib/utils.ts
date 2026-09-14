@@ -38,6 +38,33 @@ export function formatDuration(seconds: number): string {
 }
 
 /**
+ * Parse Strava's start_date_local as wall-clock time.
+ *
+ * Strava suffixes it with "Z" even though it is the athlete's local time,
+ * so strip the zone and let the browser treat it as local.
+ */
+export function parseLocalDate(startDateLocal: string): Date {
+  return new Date(startDateLocal.replace(/Z$/, ""));
+}
+
+/**
+ * Relative day label for a ride date.
+ * @example formatRideDay(today) → "Today", formatRideDay(lastWeek) → "Sat, Sep 6"
+ */
+export function formatRideDay(date: Date, now = new Date()): string {
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((startOfDay(now) - startOfDay(date)) / 86_400_000);
+  if (days === 0) return "Today";
+  if (days === 1) return "Yesterday";
+  return date.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    ...(date.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}),
+  });
+}
+
+/**
  * Format seconds into HH:MM:SS.
  * @example formatTime(3661) → "1:01:01"
  */

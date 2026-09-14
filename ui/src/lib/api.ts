@@ -148,6 +148,25 @@ export interface InfographicStats {
   }>;
 }
 
+export interface RecentRide {
+  id: number;
+  name: string | null;
+  type: string;
+  /** Wall-clock time at the ride. Strava appends "Z" but it is NOT UTC. */
+  startDateLocal: string;
+  distance: number;
+  movingTime: number;
+  elevation: number;
+  avgSpeed: number | null;
+  avgHeartrate: number | null;
+  avgWatts: number | null;
+  calories: number | null;
+  achievementCount: number;
+  prCount: number;
+  komCount: number;
+  trainer: boolean;
+}
+
 export interface EnsureFreshResponse {
   fresh: boolean;
   syncing?: boolean;
@@ -181,6 +200,11 @@ export function fetchGearUsage(userId: string): Promise<GearUsage[]> {
 /** Fetch activity type breakdown */
 export function fetchActivityTypes(userId: string): Promise<ActivityTypeBreakdown[]> {
   return apiFetch(`/v1/reports/activity-type/${userId}`);
+}
+
+/** Fetch the most recent rides, newest first */
+export function fetchRecentRides(userId: string, limit = 5): Promise<RecentRide[]> {
+  return apiFetch(`/v1/reports/recent-rides/${userId}?limit=${limit}`);
 }
 
 /** Fetch KOM/PR achievement timeline */

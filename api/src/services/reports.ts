@@ -686,6 +686,79 @@ export async function getInfographicStats(
   };
 }
 
+// ── Recent Rides ───────────────────────────────────────
+
+export interface RecentRide {
+  id: number;
+  name: string | null;
+  type: string;
+  /** Strava's start_date_local — wall-clock time at the ride, despite the trailing "Z" */
+  startDateLocal: string;
+  distance: number;
+  movingTime: number;
+  elevation: number;
+  avgSpeed: number | null;
+  avgHeartrate: number | null;
+  avgWatts: number | null;
+  calories: number | null;
+  achievementCount: number;
+  prCount: number;
+  komCount: number;
+  trainer: boolean;
+}
+
+/**
+ * Most recent rides (Ride + VirtualRide), newest first.
+ */
+export async function getRecentRides(athleteId: number, limit = 5): Promise<RecentRide[]> {
+  const rows = await db.all<{
+    id: number;
+    name: string | null;
+    type: string;
+    start_date_local: string;
+    distance: number | null;
+    moving_time: number | null;
+    total_elevation_gain: number | null;
+    average_speed: number | null;
+    average_heartrate: number | null;
+    average_watts: number | null;
+    calories: number | null;
+    achievement_count: number | null;
+    pr_count: number | null;
+    kom_count: number | null;
+    trainer: number | null;
+  }>(sql`
+    SELECT
+      id, name, type, start_date_local, distance, moving_time,
+      total_elevation_gain, average_speed, average_heartrate, average_watts,
+      calories, achievement_count, pr_count, kom_count, trainer
+    FROM activities
+    WHERE athlete_id = ${athleteId}
+      AND type IN ('Ride', 'VirtualRide')
+      AND start_date IS NOT NULL
+    ORDER BY start_date DESC
+    LIMIT ${limit}
+  `);
+
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    type: r.type,
+    startDateLocal: r.start_date_local,
+    distance: r.distance ?? 0,
+    movingTime: r.moving_time ?? 0,
+    elevation: r.total_elevation_gain ?? 0,
+    avgSpeed: r.average_speed,
+    avgHeartrate: r.average_heartrate,
+    avgWatts: r.average_watts,
+    calories: r.calories,
+    achievementCount: r.achievement_count ?? 0,
+    prCount: r.pr_count ?? 0,
+    komCount: r.kom_count ?? 0,
+    trainer: r.trainer === 1,
+  }));
+}
+
 // ── KOM/PR Achievement Timeline ────────────────────────
 
 /**
