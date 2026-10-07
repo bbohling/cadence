@@ -31,6 +31,7 @@ import { readTrackFile } from "./lib/track-files";
 import { processTrack } from "../src/services/tracks/process";
 import { matchClimb, matchRoute, type CanonicalClimb, type RouteCluster } from "../src/services/tracks/match";
 import { encodeTiles } from "../src/services/tracks/tiles";
+import { haversineM } from "../src/services/tracks/geo";
 
 const RIDE_TYPES = new Set(["Ride", "Virtual Ride"]);
 const MAX_STATEMENT_BYTES = 90_000;
@@ -175,6 +176,72 @@ for (const p of processed) {
     ]);
   }
 }
+
+// ── Climb names from Strava segments ───────────────────
+// A detected climb has no name. Borrow one from a Strava segment the
+// athlete has ridden that sits on it. Segments usually start/end inside a
+// detected climb, so endpoints get slack proportional to climb length, and
+// the best fit wins: score = length overlap ratio − endpoint offset / length.
+// Read from the local copy of the database (data/cadence.db), since
+// segment coordinates only live in raw_json.
+
+const NAME_MIN_SLACK_M = 300;
+const NAME_SLACK_FRACTION = 0.35;
+const NAME_MIN_LENGTH_RATIO = 0.5;
+
+interface Segment { name: string; startLat: number; startLng: number; endLat: number; endLng: number; lengthM: number; efforts: number }
+
+function loadSegments(): Segment[] {
+  const path = join(apiDir, "data", "cadence.db");
+  if (!existsSync(path)) return [];
+  const db = new Database(path, { readonly: true });
+  const rows = db.query(`
+    SELECT json_extract(raw_json, '$.segment.name') AS name,
+           json_extract(raw_json, '$.segment.start_latlng') AS start,
+           json_extract(raw_json, '$.segment.end_latlng') AS end,
+           json_extract(raw_json, '$.segment.distance') AS length,
+           COUNT(*) AS efforts
+    FROM src_segment_efforts
+    WHERE athlete_id = ?
+    GROUP BY segment_id
+  `).all(athleteId) as Array<{ name: string | null; start: string | null; end: string | null; length: number | null; efforts: number }>;
+  db.close();
+  return rows.flatMap((r) => {
+    const s = r.start ? (JSON.parse(r.start) as number[]) : [];
+    const e = r.end ? (JSON.parse(r.end) as number[]) : [];
+    if (!r.name || s.length !== 2 || e.length !== 2 || !r.length) return [];
+    return [{ name: r.name.trim(), startLat: s[0]!, startLng: s[1]!, endLat: e[0]!, endLng: e[1]!, lengthM: r.length, efforts: r.efforts }];
+  });
+}
+
+const segments = loadSegments();
+let named = 0;
+for (const row of rows.climbs!) {
+  const [, , , sLat, sLng, eLat, eLng, lengthM] = row as number[];
+  const length = lengthM!;
+  const slack = Math.max(NAME_MIN_SLACK_M, length * NAME_SLACK_FRACTION);
+  let best: Segment | undefined;
+  let bestScore = -Infinity;
+  for (const seg of segments) {
+    if (seg.efforts < 2) continue;
+    const ratio = Math.min(seg.lengthM, length) / Math.max(seg.lengthM, length);
+    if (ratio < NAME_MIN_LENGTH_RATIO) continue;
+    const ds = haversineM(sLat!, sLng!, seg.startLat, seg.startLng);
+    if (ds > slack) continue;
+    const de = haversineM(eLat!, eLng!, seg.endLat, seg.endLng);
+    if (de > slack) continue;
+    const score = ratio - (ds + de) / length;
+    if (score > bestScore || (score === bestScore && seg.efforts > (best?.efforts ?? 0))) {
+      bestScore = score;
+      best = seg;
+    }
+  }
+  if (best) {
+    row[2] = best.name;
+    named++;
+  }
+}
+console.log(`named ${named}/${rows.climbs!.length} climbs from ${segments.length} Strava segments`);
 
 function round6(n: number) {
   return Math.round(n * 1e6) / 1e6;

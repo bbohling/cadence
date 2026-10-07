@@ -20,10 +20,17 @@ export interface CanonicalClimb {
   lengthM: number;
 }
 
-/** Both ends within this distance of the canonical climb's ends */
-const CLIMB_ENDPOINT_TOLERANCE_M = 150;
+/**
+ * Where a climb "starts" is fuzzy (the grade ramps up gradually, and a
+ * slower day smooths differently); where it tops out is sharp. So the
+ * summit must match tightly, the start loosely. Opposite sides of the same
+ * hill share a summit but start hundreds of meters apart on different
+ * roads, so they stay separate.
+ */
+const CLIMB_END_TOLERANCE_M = 100;
+const CLIMB_START_TOLERANCE_M = 300;
 /** Length within this fraction of the canonical climb's length */
-const CLIMB_LENGTH_TOLERANCE = 0.1;
+const CLIMB_LENGTH_TOLERANCE = 0.2;
 
 /** Closest canonical climb this effort belongs to, if any. */
 export function matchClimb(
@@ -34,10 +41,10 @@ export function matchClimb(
   let bestScore = Infinity;
   for (const c of candidates) {
     if (Math.abs(climb.lengthM - c.lengthM) > c.lengthM * CLIMB_LENGTH_TOLERANCE) continue;
-    const ds = haversineM(climb.startLat, climb.startLng, c.startLat, c.startLng);
-    if (ds > CLIMB_ENDPOINT_TOLERANCE_M) continue;
     const de = haversineM(climb.endLat, climb.endLng, c.endLat, c.endLng);
-    if (de > CLIMB_ENDPOINT_TOLERANCE_M) continue;
+    if (de > CLIMB_END_TOLERANCE_M) continue;
+    const ds = haversineM(climb.startLat, climb.startLng, c.startLat, c.startLng);
+    if (ds > CLIMB_START_TOLERANCE_M) continue;
     if (ds + de < bestScore) {
       bestScore = ds + de;
       best = c;

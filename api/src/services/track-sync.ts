@@ -171,7 +171,8 @@ async function storeProcessed(
   // ── Climbs ─────────────────────────────────────────
   const effortRows: Array<typeof climbEfforts.$inferInsert> = [];
   for (const c of p.climbs) {
-    // ~300 m box around the start; matchClimb applies the precise checks
+    // ~330 m × ~310 m box around the start (covers the 300 m start
+    // tolerance at Pacific NW latitudes); matchClimb applies the precise checks
     const near = await db
       .select()
       .from(climbs)
