@@ -8,6 +8,7 @@ import { initDb } from "./db/connection";
 
 // ── Routes ─────────────────────────────────────────────
 import { reports } from "./routes/reports";
+import { tracks } from "./routes/tracks";
 import { koms } from "./routes/koms";
 import { sync } from "./routes/sync";
 import { health } from "./routes/health";
@@ -16,6 +17,7 @@ import { ensureFresh } from "./routes/ensure-fresh";
 // ── Scheduled jobs ─────────────────────────────────────
 import { syncUser } from "./services/sync";
 import { runNormalization } from "./services/normalize";
+import { syncTracks } from "./services/track-sync";
 import { refreshCurrentKoms } from "./services/kom-refresh";
 import { pruneOperationalLogs } from "./services/prune";
 
@@ -30,6 +32,7 @@ import { pruneOperationalLogs } from "./services/prune";
  * Route structure:
  *   /health              — health check
  *   /v1/reports/*        — dashboard reports
+ *   /v1/tracks/*         — tiles, power curve, climbs, routes
  *   /v1/koms/*           — KOM data
  *   /v1/sync/*           — sync triggers
  *   /v1/ensure-fresh/*   — data freshness checks
@@ -91,6 +94,7 @@ app.onError((err, c) => {
 
 app.route("/health", health);
 app.route("/v1/reports", reports);
+app.route("/v1/tracks", tracks);
 app.route("/v1/koms", koms);
 app.route("/v1/sync", sync);
 app.route("/v1/ensure-fresh", ensureFresh);
@@ -104,7 +108,8 @@ root.route("/api", app);
 
 // ── Cron handlers ──────────────────────────────────────
 // Schedules are defined in wrangler.jsonc (UTC):
-//   "5 * * * *"  — hourly Strava sync + normalization
+//   "5 * * * *"  — hourly Strava sync + normalization (+ one ride of track
+//                  processing on hours when the sync found nothing new)
 //   "0 12 * * *" — daily KOM refresh (~4–5 AM Pacific)
 
 const HOURLY_SYNC = "5 * * * *";
@@ -120,6 +125,13 @@ async function runScheduled(cron: string): Promise<void> {
       log.info("Cron sync complete, running normalization", { ...syncResult });
       const normResult = await runNormalization();
       log.info("Cron normalization complete", { ...normResult });
+      // Track processing costs a few ms of CPU per ride. The free plan allows
+      // 10 ms per invocation, so only spend it on quiet hours; a new ride is
+      // picked up the hour after it syncs.
+      if (syncResult.activitiesAdded === 0) {
+        const trackResult = await syncTracks(userId, 1);
+        log.info("Cron track sync complete", { ...trackResult });
+      }
       break;
     }
     case DAILY_KOM_REFRESH: {

@@ -12,7 +12,7 @@
  * production) and then applies the migrations that postdate it. Takes about a
  * minute; you only run it once.
  */
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,7 +26,12 @@ const dump = join(api, "data", "cadence-d1-dump.sql");
 const MIGRATIONS_AFTER_DUMP = [
   "drizzle/0002_useful_ultimo.sql",
   "drizzle/0003_normalize_legacy_timestamps.sql",
+  "drizzle/0004_track_tables.sql",
 ];
+
+// Track-derived rows (tiles, power bests, climbs, routes) built from a Strava
+// export by api/scripts/backfill-tracks.ts. Optional: imported when present.
+const tracksDir = join(api, "data", "tracks");
 
 function d1(args, label) {
   process.stdout.write(`  ${label} ... `);
@@ -71,6 +76,14 @@ rmSync(join(api, ".wrangler", ".seeded"), { force: true });
 d1(["--file", "data/cadence-d1-dump.sql"], "import dump        ");
 for (const m of MIGRATIONS_AFTER_DUMP) {
   d1(["--file", m], `apply ${m.replace("drizzle/", "").padEnd(14)}`);
+}
+
+if (existsSync(tracksDir)) {
+  for (const f of readdirSync(tracksDir).filter((f) => f.endsWith(".sql")).sort()) {
+    d1(["--file", join("data", "tracks", f)], `import ${f.padEnd(18)}`);
+  }
+} else {
+  console.log("  (no data/tracks — run api/scripts/backfill-tracks.ts to add track data)");
 }
 
 // Marker so `bun run dev` can tell a seeded replica from an empty one without

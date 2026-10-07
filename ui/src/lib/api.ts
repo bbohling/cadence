@@ -167,12 +167,138 @@ export interface RecentRide {
   trainer: boolean;
 }
 
+export interface RideDetail extends RecentRide {
+  maxSpeed: number | null;
+  maxWatts: number | null;
+  weightedAvgWatts: number | null;
+  maxHeartrate: number | null;
+  avgCadence: number | null;
+  avgTemp: number | null;
+  elevHigh: number | null;
+  elevLow: number | null;
+  /** Google-encoded polyline at Strava summary resolution; null for indoor rides */
+  polyline: string | null;
+}
+
+export interface RidePolyline {
+  id: number;
+  name: string | null;
+  startDateLocal: string;
+  distance: number;
+  elevation: number;
+  /** Google-encoded polyline */
+  polyline: string;
+}
+
 export interface EnsureFreshResponse {
   fresh: boolean;
   syncing?: boolean;
   syncFailed?: boolean;
   error?: string;
   lastSyncAt?: string;
+}
+
+// ── Track-derived (tiles, power, climbs, routes) ───────
+
+export interface ExplorerTiles {
+  tiles: number;
+  maxSquare: number;
+  /** Top-left [x, y] of the max square, z14 */
+  maxSquareOrigin: [number, number] | null;
+  maxCluster: number;
+  newThisYear: number;
+  year: number;
+  /** [x, y, firstVisitYear] per visited z14 tile */
+  visited: Array<[number, number, number]>;
+}
+
+export interface PowerCurvePoint {
+  durationS: number;
+  watts: number;
+  activityId: number;
+  startDate: string;
+}
+
+export interface PowerCurve {
+  durations: number[];
+  allTime: PowerCurvePoint[];
+  /** Newest first */
+  years: Array<{ year: number; points: PowerCurvePoint[] }>;
+}
+
+export interface ClimbSummary {
+  id: number;
+  name: string | null;
+  /** Miles */
+  length: number;
+  /** Feet */
+  gain: number;
+  avgGrade: number;
+  efforts: number;
+  bestElapsedS: number;
+  bestDate: string;
+  bestActivityId: number;
+  lastDate: string;
+  /** [lat, lng] */
+  start: [number, number];
+  end: [number, number];
+}
+
+export interface ClimbEffort {
+  activityId: number;
+  activityName: string | null;
+  startDate: string;
+  elapsedS: number;
+  avgWatts: number | null;
+  avgHr: number | null;
+  /** 1 = fastest */
+  rank: number;
+}
+
+export interface ClimbDetail {
+  climb: Pick<ClimbSummary, "id" | "name" | "length" | "gain" | "avgGrade" | "start" | "end">;
+  /** Chronological */
+  efforts: ClimbEffort[];
+}
+
+export interface RouteSummary {
+  id: number;
+  name: string | null;
+  /** Miles */
+  distance: number;
+  rides: number;
+  firstDate: string;
+  lastDate: string;
+  /** Fastest average speed of any ride on the route, mph */
+  bestSpeed: number | null;
+  /** Encoded polyline of the representative ride */
+  polyline: string | null;
+}
+
+export interface RouteRide {
+  activityId: number;
+  name: string | null;
+  startDate: string;
+  avgSpeed: number | null;
+  avgWatts: number | null;
+  avgHeartrate: number | null;
+  movingTime: number | null;
+}
+
+export interface RideTrackExtras {
+  /** Higher-resolution polyline than the Strava summary; null until processed */
+  detailPolyline: string | null;
+  climbs: Array<{
+    climbId: number;
+    name: string | null;
+    length: number;
+    avgGrade: number;
+    elapsedS: number;
+    avgWatts: number | null;
+    rank: number;
+    efforts: number;
+  }>;
+  powerBests: Array<{ durationS: number; watts: number; allTimeBest: number }>;
 }
 
 // ── API Functions ──────────────────────────────────────
@@ -205,6 +331,16 @@ export function fetchActivityTypes(userId: string): Promise<ActivityTypeBreakdow
 /** Fetch the most recent rides, newest first */
 export function fetchRecentRides(userId: string, limit = 5): Promise<RecentRide[]> {
   return apiFetch(`/v1/reports/recent-rides/${userId}?limit=${limit}`);
+}
+
+/** Fetch one ride for the detail page */
+export function fetchRide(userId: string, id: number): Promise<RideDetail> {
+  return apiFetch(`/v1/reports/ride/${userId}/${id}`);
+}
+
+/** Fetch outdoor ride maps, oldest first; all years when `year` is omitted */
+export function fetchRidePolylines(userId: string, year?: number): Promise<RidePolyline[]> {
+  return apiFetch(`/v1/reports/polylines/${userId}${year ? `?year=${year}` : ""}`);
 }
 
 /** Fetch KOM/PR achievement timeline */
@@ -273,4 +409,39 @@ export function fetchEnsureFresh(userId: string): Promise<EnsureFreshResponse> {
 /** Trigger a manual sync */
 export function triggerSync(userId: string): Promise<unknown> {
   return apiFetch(`/v1/sync/${userId}`, { method: "POST" });
+}
+
+/** Explorer tiles: every visited z14 tile plus max square / cluster */
+export function fetchExplorerTiles(userId: string): Promise<ExplorerTiles> {
+  return apiFetch(`/v1/tracks/tiles/${userId}`);
+}
+
+/** Mean-max power curve, all-time and per year */
+export function fetchPowerCurve(userId: string): Promise<PowerCurve> {
+  return apiFetch(`/v1/tracks/power-curve/${userId}`);
+}
+
+/** Auto-detected climbs ridden at least twice, most-ridden first */
+export function fetchClimbs(userId: string): Promise<ClimbSummary[]> {
+  return apiFetch(`/v1/tracks/climbs/${userId}`);
+}
+
+/** Every effort on one climb */
+export function fetchClimb(userId: string, id: number): Promise<ClimbDetail> {
+  return apiFetch(`/v1/tracks/climbs/${userId}/${id}`);
+}
+
+/** Routes ridden at least three times, most-ridden first */
+export function fetchRoutes(userId: string): Promise<RouteSummary[]> {
+  return apiFetch(`/v1/tracks/routes/${userId}`);
+}
+
+/** Every ride on one route, chronological */
+export function fetchRouteRides(userId: string, id: number): Promise<RouteRide[]> {
+  return apiFetch(`/v1/tracks/routes/${userId}/${id}`);
+}
+
+/** Detail polyline, climbs and power bests for one ride */
+export function fetchRideTrack(userId: string, id: number): Promise<RideTrackExtras> {
+  return apiFetch(`/v1/tracks/ride/${userId}/${id}`);
 }

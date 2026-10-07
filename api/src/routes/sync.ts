@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { syncUser } from "../services/sync";
 import { startBulkSync, getBulkSyncStatus, resetBulkSync } from "../services/bulk-sync";
 import { runNormalization } from "../services/normalize";
+import { syncTracks } from "../services/track-sync";
 import { log } from "../utils/logger";
 
 /**
@@ -33,6 +34,25 @@ sync.post("/:userId", async (c) => {
     });
     return c.json(
       { error: error instanceof Error ? error.message : "Sync failed" },
+      500
+    );
+  }
+});
+
+// POST /sync/tracks/:userId?limit=1 — process pending rides' streams into
+// track data (the hourly cron does one per run; this drains a backlog)
+sync.post("/tracks/:userId", async (c) => {
+  const userId = c.req.param("userId");
+  // Capped low: each ride is a Strava call plus a few ms of CPU
+  const limit = Math.min(Math.max(Number(c.req.query("limit")) || 1, 1), 5);
+  try {
+    return c.json(await syncTracks(userId, limit));
+  } catch (error) {
+    log.error("Track sync endpoint error", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return c.json(
+      { error: error instanceof Error ? error.message : "Track sync failed" },
       500
     );
   }

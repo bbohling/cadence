@@ -1,14 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { fetchRecentRides, type RecentRide } from "@/lib/api";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatNumber, formatDuration, formatRideDay, parseLocalDate } from "@/lib/utils";
-import { Bike, Crown, ExternalLink, Monitor, Trophy } from "lucide-react";
+import { Bike, ChevronRight, Crown, Monitor, Trophy } from "lucide-react";
 
 /**
  * Recent Rides — the last few rides, newest first.
  *
- * Each row links out to the activity on Strava. On mobile the stats
+ * Each row opens the ride detail page. On mobile the stats
  * drop below the ride name; on wider screens they sit in columns.
  */
 
@@ -72,17 +73,16 @@ function RideRow({ ride }: { ride: RecentRide }) {
   const time = date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
   return (
-    <a
-      href={`https://www.strava.com/activities/${ride.id}`}
-      target="_blank"
-      rel="noreferrer"
+    <Link
+      to="/ride/$id"
+      params={{ id: String(ride.id) }}
       className="group flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 px-3 py-3 rounded-lg hover:bg-slate-800/40 active:bg-slate-800/60 transition-colors"
     >
       {/* Name + date */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="font-medium text-white truncate">{ride.name ?? "Untitled ride"}</span>
-          <ExternalLink className="w-3 h-3 shrink-0 text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity hidden sm:block" />
+          <ChevronRight className="w-3.5 h-3.5 shrink-0 text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity hidden sm:block" />
         </div>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5 text-xs text-slate-500">
           <span>{formatRideDay(date)} · {time}</span>
@@ -110,7 +110,7 @@ function RideRow({ ride }: { ride: RecentRide }) {
         <Stat value={formatNumber(ride.elevation, 0)} unit="ft" />
         <Stat value={formatDuration(ride.movingTime)} />
       </div>
-    </a>
+    </Link>
   );
 }
 

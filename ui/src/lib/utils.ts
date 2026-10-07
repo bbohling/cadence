@@ -75,3 +75,13 @@ export function formatTime(seconds: number): string {
   if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   return `${m}:${String(s).padStart(2, "0")}`;
 }
+
+/**
+ * Short label for a power-curve duration.
+ * @example formatDurationShort(5) → "5s", formatDurationShort(1200) → "20m", formatDurationShort(3600) → "1h"
+ */
+export function formatDurationShort(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${seconds / 60}m`;
+  return `${seconds / 3600}h`;
+}

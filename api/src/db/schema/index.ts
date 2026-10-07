@@ -44,3 +44,7 @@ export {
   normalizeState,
 } from "./sync";
 export type { SyncLog, BulkSyncState, RateLimitLog, NormalizeState } from "./sync";
+
+// ── Track-derived (tiles, power, climbs, routes) ───────
+export { activityTracks, powerBests, climbs, climbEfforts, routeClusters } from "./tracks";
+export type { ActivityTrack, PowerBestRow, Climb, ClimbEffort, RouteClusterRow } from "./tracks";
