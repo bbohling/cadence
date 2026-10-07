@@ -5,6 +5,7 @@ import { PixelsPage } from "./pixels";
 import { RingsPage } from "./rings";
 import { InfographicPage } from "./infographic";
 import { PlashPage } from "./plash";
+import { EffortsPage, EFFORT_TABS, type EffortTab } from "./efforts";
 
 /**
  * Route tree definition.
@@ -21,6 +22,7 @@ import { PlashPage } from "./plash";
  *   /plash        → Yearly highlights wallpaper for Plash (hidden, no nav)
  *   /map          → Personal heatmap of every outdoor ride
  *   /ride/$id     → Ride detail (map + stats)
+ *   /efforts      → Climbs, routes and power curve (?tab=climbs|routes|power)
  *
  * /map and /ride load lazily so maplibre-gl stays out of the main bundle.
  */
@@ -79,6 +81,18 @@ const rideRoute = createRoute({
   component: lazyRouteComponent(() => import("./ride"), "RidePage"),
 });
 
+// Climbs, routes, power curve
+const effortsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/efforts",
+  component: EffortsPage,
+  validateSearch: (search: Record<string, unknown>): { tab: EffortTab; climb?: number } => ({
+    tab: EFFORT_TABS.includes(search.tab as EffortTab) ? (search.tab as EffortTab) : "climbs",
+    // Preselects a climb when arriving from a ride page
+    climb: Number.isSafeInteger(Number(search.climb)) && Number(search.climb) > 0 ? Number(search.climb) : undefined,
+  }),
+});
+
 export const routeTree = rootRoute.addChildren([
   indexRoute,
   pixelsRoute,
@@ -87,4 +101,5 @@ export const routeTree = rootRoute.addChildren([
   plashRoute,
   mapRoute,
   rideRoute,
+  effortsRoute,
 ]);

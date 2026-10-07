@@ -26,19 +26,31 @@ const STYLE_URL = "https://tiles.openfreemap.org/styles/dark";
 const LINE_COLOR = "#fc4c02"; // --color-strava
 const SOURCE = "rides";
 
+/** Explorer-tile overlay (z14): visited tiles and the max square */
+export interface TileOverlay {
+  /** [x, y, firstVisitYear] */
+  visited: Array<[number, number, number]>;
+  /** Tiles first visited this year are highlighted */
+  year: number;
+  maxSquare: { origin: [number, number]; size: number } | null;
+}
+
 interface RideMapProps {
   lines: LngLat[][];
   variant?: "heat" | "single";
+  tiles?: TileOverlay | null;
   className?: string;
 }
 
-export function RideMap({ lines, variant = "heat", className }: RideMapProps) {
+export function RideMap({ lines, variant = "heat", tiles = null, className }: RideMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const loadedRef = useRef(false);
   // Latest lines, read by the load handler in case data arrives first
   const linesRef = useRef(lines);
   linesRef.current = lines;
+  const tilesRef = useRef(tiles);
+  tilesRef.current = tiles;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -54,6 +66,27 @@ export function RideMap({ lines, variant = "heat", className }: RideMapProps) {
     mapRef.current = map;
 
     map.on("load", () => {
+      // Tiles sit under the ride lines
+      map.addSource("tiles", { type: "geojson", data: tilesGeoJson(tilesRef.current) });
+      map.addLayer({
+        id: "tiles-fill",
+        type: "fill",
+        source: "tiles",
+        filter: ["==", ["get", "kind"], "tile"],
+        paint: {
+          "fill-color": ["case", ["get", "isNew"], "#4ade80", "#38bdf8"],
+          "fill-opacity": ["case", ["get", "isNew"], 0.35, 0.14],
+          "fill-outline-color": "rgba(56, 189, 248, 0.35)",
+        },
+      });
+      map.addLayer({
+        id: "tiles-square",
+        type: "line",
+        source: "tiles",
+        filter: ["==", ["get", "kind"], "square"],
+        paint: { "line-color": "#fbbf24", "line-width": 2.5 },
+      });
+
       map.addSource(SOURCE, { type: "geojson", data: toGeoJson(linesRef.current) });
 
       if (variant === "heat") {
@@ -117,6 +150,12 @@ export function RideMap({ lines, variant = "heat", className }: RideMapProps) {
     fit(map, lines, variant, true);
   }, [lines, variant]);
 
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !loadedRef.current) return;
+    (map.getSource("tiles") as GeoJSONSource | undefined)?.setData(tilesGeoJson(tiles));
+  }, [tiles]);
+
   return <div ref={containerRef} className={cn("w-full h-full", className)} />;
 }
 
@@ -154,4 +193,44 @@ function endpoints(lines: LngLat[][]): GeoJSON.FeatureCollection {
     type: "FeatureCollection",
     features: [point(last, "end"), point(first, "start")],
   };
+}
+
+// ── Tiles ──────────────────────────────────────────────
+
+const TILE_ZOOM = 14;
+
+/** North-west corner of a z14 tile as [lng, lat]. */
+function tileCorner(x: number, y: number): LngLat {
+  const n = 2 ** TILE_ZOOM;
+  const lng = (x / n) * 360 - 180;
+  const lat = (Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / n))) * 180) / Math.PI;
+  return [lng, lat];
+}
+
+function tileRing(x: number, y: number, size = 1): LngLat[] {
+  return [
+    tileCorner(x, y),
+    tileCorner(x + size, y),
+    tileCorner(x + size, y + size),
+    tileCorner(x, y + size),
+    tileCorner(x, y),
+  ];
+}
+
+function tilesGeoJson(tiles: TileOverlay | null): GeoJSON.FeatureCollection {
+  if (!tiles) return { type: "FeatureCollection", features: [] };
+  const features: GeoJSON.Feature[] = tiles.visited.map(([x, y, year]) => ({
+    type: "Feature",
+    properties: { kind: "tile", isNew: year === tiles.year },
+    geometry: { type: "Polygon", coordinates: [tileRing(x, y)] },
+  }));
+  if (tiles.maxSquare) {
+    const [x, y] = tiles.maxSquare.origin;
+    features.push({
+      type: "Feature",
+      properties: { kind: "square" },
+      geometry: { type: "LineString", coordinates: tileRing(x, y, tiles.maxSquare.size) },
+    });
+  }
+  return { type: "FeatureCollection", features };
 }

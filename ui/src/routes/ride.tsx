@@ -1,17 +1,22 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
-import { ArrowLeft, Crown, ExternalLink, Monitor, Trophy } from "lucide-react";
-import { fetchRide } from "@/lib/api";
+import { ArrowLeft, Crown, ExternalLink, Monitor, Mountain, Trophy, Zap } from "lucide-react";
+import { fetchRide, fetchRideTrack, type RideTrackExtras } from "@/lib/api";
 import { decodePolyline } from "@/lib/polyline";
 import { RideMap } from "@/components/map/ride-map";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatDuration, formatNumber, parseLocalDate } from "@/lib/utils";
+import { formatDuration, formatDurationShort, formatNumber, formatTime, parseLocalDate } from "@/lib/utils";
+import { climbLabel } from "@/components/efforts/climbs-panel";
 
 /**
  * Ride detail — map (outdoor rides) plus the stats Cadence stores.
  * Reached from Recent Rides and from route-art shapes.
+ *
+ * When the ride has been through track processing, the map uses the
+ * higher-resolution detail polyline, and climbs + power bests are shown
+ * against every other effort.
  */
 
 const USER_ID = "brandon";
@@ -26,10 +31,14 @@ export function RidePage() {
     enabled: Number.isSafeInteger(rideId) && rideId > 0,
   });
 
-  const lines = useMemo(
-    () => (ride?.polyline ? [decodePolyline(ride.polyline)] : []),
-    [ride?.polyline]
-  );
+  const { data: track } = useQuery({
+    queryKey: ["ride-track", USER_ID, rideId],
+    queryFn: () => fetchRideTrack(USER_ID, rideId),
+    enabled: Number.isSafeInteger(rideId) && rideId > 0,
+  });
+
+  const encoded = track?.detailPolyline ?? ride?.polyline ?? null;
+  const lines = useMemo(() => (encoded ? [decodePolyline(encoded)] : []), [encoded]);
 
   if (isLoading) {
     return (
@@ -118,7 +127,90 @@ export function RidePage() {
             ))}
         </CardContent>
       </Card>
+
+      {track && (track.climbs.length > 0 || track.powerBests.length > 0) && (
+        <div className="grid gap-4 lg:grid-cols-2 items-start">
+          {track.climbs.length > 0 && <RideClimbs climbs={track.climbs} />}
+          {track.powerBests.length > 0 && <RidePower bests={track.powerBests} />}
+        </div>
+      )}
     </div>
+  );
+}
+
+function RideClimbs({ climbs }: { climbs: RideTrackExtras["climbs"] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Mountain className="w-4 h-4 text-brand-400" /> Climbs
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="px-2 sm:px-3">
+        <ul className="divide-y divide-slate-800/60">
+          {climbs.map((c) => (
+            <li key={`${c.climbId}-${c.elapsedS}`}>
+              <Link
+                to="/efforts"
+                search={{ tab: "climbs", climb: c.climbId }}
+                className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-800/40"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className={c.name ? "truncate text-white" : "truncate text-slate-300"}>
+                    {climbLabel({ id: c.climbId, name: c.name })}
+                  </div>
+                  <div className="text-xs text-slate-500 tabular-nums">
+                    {formatNumber(c.length, 1)} mi · {formatNumber(c.avgGrade, 1)}%
+                    {c.avgWatts ? ` · ${c.avgWatts} W` : ""}
+                  </div>
+                </div>
+                <div className="text-right tabular-nums shrink-0">
+                  <div className="text-sm font-semibold text-slate-200">{formatTime(c.elapsedS)}</div>
+                  <div className="text-xs text-slate-500">
+                    {c.rank === 1 ? <span className="text-gold">fastest</span> : `#${c.rank}`} of {c.efforts}
+                  </div>
+                </div>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  );
+}
+
+function RidePower({ bests }: { bests: RideTrackExtras["powerBests"] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Zap className="w-4 h-4 text-gold" /> Power bests
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <ul className="space-y-1.5">
+          {bests.map((b) => {
+            const pct = b.allTimeBest ? Math.min(100, (b.watts / b.allTimeBest) * 100) : 0;
+            return (
+              <li key={b.durationS} className="grid grid-cols-[2.5rem_1fr_4.5rem] items-center gap-3 text-sm tabular-nums">
+                <span className="text-slate-500 text-xs">{formatDurationShort(b.durationS)}</span>
+                <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
+                  <div
+                    className={pct >= 100 ? "h-full bg-gold" : "h-full bg-strava/80"}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <span className="text-right">
+                  <span className="text-slate-200 font-medium">{b.watts}</span>
+                  <span className="text-slate-500 text-xs"> / {b.allTimeBest}</span>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+        <p className="text-[11px] text-slate-600 mt-2">this ride / all-time best, watts</p>
+      </CardContent>
+    </Card>
   );
 }
 

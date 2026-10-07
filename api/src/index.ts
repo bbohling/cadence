@@ -8,6 +8,7 @@ import { initDb } from "./db/connection";
 
 // ── Routes ─────────────────────────────────────────────
 import { reports } from "./routes/reports";
+import { tracks } from "./routes/tracks";
 import { koms } from "./routes/koms";
 import { sync } from "./routes/sync";
 import { health } from "./routes/health";
@@ -31,6 +32,7 @@ import { pruneOperationalLogs } from "./services/prune";
  * Route structure:
  *   /health              — health check
  *   /v1/reports/*        — dashboard reports
+ *   /v1/tracks/*         — tiles, power curve, climbs, routes
  *   /v1/koms/*           — KOM data
  *   /v1/sync/*           — sync triggers
  *   /v1/ensure-fresh/*   — data freshness checks
@@ -92,6 +94,7 @@ app.onError((err, c) => {
 
 app.route("/health", health);
 app.route("/v1/reports", reports);
+app.route("/v1/tracks", tracks);
 app.route("/v1/koms", koms);
 app.route("/v1/sync", sync);
 app.route("/v1/ensure-fresh", ensureFresh);
