@@ -710,37 +710,32 @@ export interface RecentRide {
 /**
  * Most recent rides (Ride + VirtualRide), newest first.
  */
-export async function getRecentRides(athleteId: number, limit = 5): Promise<RecentRide[]> {
-  const rows = await db.all<{
-    id: number;
-    name: string | null;
-    type: string;
-    start_date_local: string;
-    distance: number | null;
-    moving_time: number | null;
-    total_elevation_gain: number | null;
-    average_speed: number | null;
-    average_heartrate: number | null;
-    average_watts: number | null;
-    calories: number | null;
-    achievement_count: number | null;
-    pr_count: number | null;
-    kom_count: number | null;
-    trainer: number | null;
-  }>(sql`
-    SELECT
-      id, name, type, start_date_local, distance, moving_time,
-      total_elevation_gain, average_speed, average_heartrate, average_watts,
-      calories, achievement_count, pr_count, kom_count, trainer
-    FROM activities
-    WHERE athlete_id = ${athleteId}
-      AND type IN ('Ride', 'VirtualRide')
-      AND start_date IS NOT NULL
-    ORDER BY start_date DESC
-    LIMIT ${limit}
-  `);
+interface RecentRideRow {
+  id: number;
+  name: string | null;
+  type: string;
+  start_date_local: string;
+  distance: number | null;
+  moving_time: number | null;
+  total_elevation_gain: number | null;
+  average_speed: number | null;
+  average_heartrate: number | null;
+  average_watts: number | null;
+  calories: number | null;
+  achievement_count: number | null;
+  pr_count: number | null;
+  kom_count: number | null;
+  trainer: number | null;
+}
 
-  return rows.map((r) => ({
+const RECENT_RIDE_COLUMNS = sql`
+  id, name, type, start_date_local, distance, moving_time,
+  total_elevation_gain, average_speed, average_heartrate, average_watts,
+  calories, achievement_count, pr_count, kom_count, trainer
+`;
+
+function toRecentRide(r: RecentRideRow): RecentRide {
+  return {
     id: r.id,
     name: r.name,
     type: r.type,
@@ -756,6 +751,125 @@ export async function getRecentRides(athleteId: number, limit = 5): Promise<Rece
     prCount: r.pr_count ?? 0,
     komCount: r.kom_count ?? 0,
     trainer: r.trainer === 1,
+  };
+}
+
+/**
+ * Most recent rides (Ride + VirtualRide), newest first.
+ */
+export async function getRecentRides(athleteId: number, limit = 5): Promise<RecentRide[]> {
+  const rows = await db.all<RecentRideRow>(sql`
+    SELECT ${RECENT_RIDE_COLUMNS}
+    FROM activities
+    WHERE athlete_id = ${athleteId}
+      AND type IN ('Ride', 'VirtualRide')
+      AND start_date IS NOT NULL
+    ORDER BY start_date DESC
+    LIMIT ${limit}
+  `);
+
+  return rows.map(toRecentRide);
+}
+
+// ── Maps ───────────────────────────────────────────────
+
+export interface RideDetail extends RecentRide {
+  maxSpeed: number | null;
+  maxWatts: number | null;
+  weightedAvgWatts: number | null;
+  maxHeartrate: number | null;
+  avgCadence: number | null;
+  avgTemp: number | null;
+  elevHigh: number | null;
+  elevLow: number | null;
+  /** Google-encoded polyline (Strava summary resolution) */
+  polyline: string | null;
+}
+
+/**
+ * One ride with everything the detail page shows. Null if it doesn't
+ * exist or belongs to another athlete.
+ */
+export async function getRideDetail(athleteId: number, id: number): Promise<RideDetail | null> {
+  const row = await db.get<RecentRideRow & {
+    max_speed: number | null;
+    max_watts: number | null;
+    weighted_average_watts: number | null;
+    max_heartrate: number | null;
+    average_cadence: number | null;
+    average_temp: number | null;
+    elev_high: number | null;
+    elev_low: number | null;
+    map_summary_polyline: string | null;
+  }>(sql`
+    SELECT ${RECENT_RIDE_COLUMNS},
+      max_speed, max_watts, weighted_average_watts, max_heartrate,
+      average_cadence, average_temp, elev_high, elev_low, map_summary_polyline
+    FROM activities
+    WHERE athlete_id = ${athleteId} AND id = ${id}
+  `);
+  if (!row) return null;
+
+  return {
+    ...toRecentRide(row),
+    maxSpeed: row.max_speed,
+    maxWatts: row.max_watts,
+    weightedAvgWatts: row.weighted_average_watts,
+    maxHeartrate: row.max_heartrate,
+    avgCadence: row.average_cadence,
+    avgTemp: row.average_temp,
+    elevHigh: row.elev_high,
+    elevLow: row.elev_low,
+    polyline: row.map_summary_polyline || null,
+  };
+}
+
+export interface RidePolyline {
+  id: number;
+  name: string | null;
+  /** Wall-clock start (see RecentRide.startDateLocal) */
+  startDateLocal: string;
+  distance: number;
+  elevation: number;
+  polyline: string;
+}
+
+/**
+ * Outdoor rides that have a map, oldest first. One row per ride, so the
+ * heatmap and route-art views share a single cached response per year.
+ * `year` omitted = every year.
+ */
+export async function getRidePolylines(athleteId: number, year?: number): Promise<RidePolyline[]> {
+  const yearFilter = year
+    ? sql`AND start_date >= ${`${year}-01-01`} AND start_date < ${`${year + 1}-01-01`}`
+    : sql``;
+
+  const rows = await db.all<{
+    id: number;
+    name: string | null;
+    start_date_local: string;
+    distance: number | null;
+    total_elevation_gain: number | null;
+    map_summary_polyline: string;
+  }>(sql`
+    SELECT id, name, start_date_local, distance, total_elevation_gain, map_summary_polyline
+    FROM activities
+    WHERE athlete_id = ${athleteId}
+      AND type = 'Ride'
+      AND COALESCE(trainer, 0) = 0
+      AND map_summary_polyline IS NOT NULL
+      AND map_summary_polyline <> ''
+      ${yearFilter}
+    ORDER BY start_date ASC
+  `);
+
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    startDateLocal: r.start_date_local,
+    distance: r.distance ?? 0,
+    elevation: r.total_elevation_gain ?? 0,
+    polyline: r.map_summary_polyline,
   }));
 }
 

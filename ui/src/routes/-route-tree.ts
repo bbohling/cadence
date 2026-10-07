@@ -1,4 +1,4 @@
-import { createRootRoute, createRoute } from "@tanstack/react-router";
+import { createRootRoute, createRoute, lazyRouteComponent } from "@tanstack/react-router";
 import { RootLayout } from "./root-layout";
 import { DashboardPage } from "./dashboard";
 import { PixelsPage } from "./pixels";
@@ -19,6 +19,10 @@ import { PlashPage } from "./plash";
  *   /rings        → Compact progress rings overlay
  *   /infographic  → Year-in-review infographic generator
  *   /plash        → Yearly highlights wallpaper for Plash (hidden, no nav)
+ *   /map          → Personal heatmap of every outdoor ride
+ *   /ride/$id     → Ride detail (map + stats)
+ *
+ * /map and /ride load lazily so maplibre-gl stays out of the main bundle.
  */
 
 // Root layout wraps all routes
@@ -61,10 +65,26 @@ const plashRoute = createRoute({
   component: PlashPage,
 });
 
+// Personal heatmap
+const mapRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/map",
+  component: lazyRouteComponent(() => import("./map"), "MapPage"),
+});
+
+// Ride detail
+const rideRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/ride/$id",
+  component: lazyRouteComponent(() => import("./ride"), "RidePage"),
+});
+
 export const routeTree = rootRoute.addChildren([
   indexRoute,
   pixelsRoute,
   ringsRoute,
   infographicRoute,
   plashRoute,
+  mapRoute,
+  rideRoute,
 ]);

@@ -2,7 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useState, useMemo, useRef } from "react";
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
 import { ChevronLeft, ChevronRight, Download, Bike } from "lucide-react";
-import { fetchInfographicStats, fetchInfographicYears } from "@/lib/api";
+import { fetchInfographicStats, fetchInfographicYears, fetchRidePolylines } from "@/lib/api";
+import { RouteArt } from "@/components/route-art";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ActivityCalendar } from "@/components/ui/activity-calendar";
 import { formatNumber } from "@/lib/utils";
@@ -85,7 +86,31 @@ export function InfographicPage() {
 
       {/* ── Infographic Card ──────────────────────── */}
       <InfographicCard data={data} />
+
+      {/* ── Route Art ─────────────────────────────── */}
+      <YearRouteArt year={selectedYear} />
     </div>
+  );
+}
+
+/** Every outdoor ride of the year as a shape, in date order. */
+function YearRouteArt({ year }: { year: number }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["polylines", USER_ID, year],
+    queryFn: () => fetchRidePolylines(USER_ID, year),
+  });
+
+  if (isLoading) return <Skeleton className="h-48 w-full max-w-4xl" />;
+  if (!data?.length) return null;
+
+  return (
+    <section className="w-full max-w-4xl bg-[#1a1a2e] rounded-xl sm:rounded-2xl p-4 sm:p-6">
+      <div className="flex items-baseline justify-between mb-3">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-slate-300">Every route</h2>
+        <span className="text-xs text-slate-500">{data.length} outdoor rides</span>
+      </div>
+      <RouteArt rides={data} />
+    </section>
   );
 }
 

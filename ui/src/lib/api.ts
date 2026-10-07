@@ -167,6 +167,29 @@ export interface RecentRide {
   trainer: boolean;
 }
 
+export interface RideDetail extends RecentRide {
+  maxSpeed: number | null;
+  maxWatts: number | null;
+  weightedAvgWatts: number | null;
+  maxHeartrate: number | null;
+  avgCadence: number | null;
+  avgTemp: number | null;
+  elevHigh: number | null;
+  elevLow: number | null;
+  /** Google-encoded polyline at Strava summary resolution; null for indoor rides */
+  polyline: string | null;
+}
+
+export interface RidePolyline {
+  id: number;
+  name: string | null;
+  startDateLocal: string;
+  distance: number;
+  elevation: number;
+  /** Google-encoded polyline */
+  polyline: string;
+}
+
 export interface EnsureFreshResponse {
   fresh: boolean;
   syncing?: boolean;
@@ -205,6 +228,16 @@ export function fetchActivityTypes(userId: string): Promise<ActivityTypeBreakdow
 /** Fetch the most recent rides, newest first */
 export function fetchRecentRides(userId: string, limit = 5): Promise<RecentRide[]> {
   return apiFetch(`/v1/reports/recent-rides/${userId}?limit=${limit}`);
+}
+
+/** Fetch one ride for the detail page */
+export function fetchRide(userId: string, id: number): Promise<RideDetail> {
+  return apiFetch(`/v1/reports/ride/${userId}/${id}`);
+}
+
+/** Fetch outdoor ride maps, oldest first; all years when `year` is omitted */
+export function fetchRidePolylines(userId: string, year?: number): Promise<RidePolyline[]> {
+  return apiFetch(`/v1/reports/polylines/${userId}${year ? `?year=${year}` : ""}`);
 }
 
 /** Fetch KOM/PR achievement timeline */

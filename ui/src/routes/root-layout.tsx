@@ -1,5 +1,5 @@
 import { Outlet, Link, useRouterState } from "@tanstack/react-router";
-import { Activity, BarChart3, MonitorDot, Image } from "lucide-react";
+import { Activity, BarChart3, MonitorDot, Image, Map } from "lucide-react";
 import { useEnsureFresh } from "@/hooks/use-ensure-fresh";
 import { cn } from "@/lib/utils";
 
@@ -23,6 +23,7 @@ const BARE_PATHS = new Set(["/rings", "/plash"]);
 
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", icon: BarChart3 },
+  { to: "/map", label: "Map", icon: Map },
   { to: "/pixels", label: "Pixels", icon: MonitorDot },
   { to: "/infographic", label: "Infographic", icon: Image },
 ] as const;
@@ -89,7 +90,7 @@ function AppShell({ currentPath }: { currentPath: string }) {
 
       {/* ── Mobile Tab Bar ───────────────────────────── */}
       <nav className="sm:hidden fixed bottom-0 inset-x-0 z-50 border-t border-slate-800 bg-slate-950/90 backdrop-blur-md pb-[env(safe-area-inset-bottom)]">
-        <div className="grid grid-cols-3">
+        <div className="grid grid-cols-4">
           {NAV_ITEMS.map(({ to, label, icon: Icon }) => {
             const active = currentPath === to;
             return (

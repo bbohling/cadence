@@ -10,6 +10,8 @@ import {
   getKomPrTimeline,
   getInfographicStats,
   getRecentRides,
+  getRideDetail,
+  getRidePolylines,
 } from "../services/reports";
 
 /**
@@ -70,6 +72,31 @@ reports.get("/recent-rides/:userId", async (c) => {
   const athleteId = await resolveAthleteId(c.req.param("userId"));
   const limit = Math.min(Math.max(Number(c.req.query("limit")) || 5, 1), 50);
   return c.json(await getRecentRides(athleteId, limit));
+});
+
+// GET /reports/ride/:userId/:id — one ride for the detail page
+reports.get("/ride/:userId/:id", async (c) => {
+  const athleteId = await resolveAthleteId(c.req.param("userId"));
+  const id = Number(c.req.param("id"));
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    return c.json({ error: "Invalid ride id" }, 400);
+  }
+  const ride = await getRideDetail(athleteId, id);
+  if (!ride) return c.json({ error: "Ride not found" }, 404);
+  return c.json(ride);
+});
+
+// GET /reports/polylines/:userId?year=YYYY — outdoor ride maps (all years if omitted)
+reports.get("/polylines/:userId", async (c) => {
+  const athleteId = await resolveAthleteId(c.req.param("userId"));
+  const yearParam = c.req.query("year");
+  const year = yearParam ? Number(yearParam) : undefined;
+  if (year !== undefined && (!Number.isInteger(year) || year < 2000 || year > 2100)) {
+    return c.json({ error: "Invalid year" }, 400);
+  }
+  // Routes change at most hourly (sync cron); let the browser reuse them.
+  c.header("Cache-Control", "private, max-age=900");
+  return c.json(await getRidePolylines(athleteId, year));
 });
 
 // GET /reports/kom-pr-achievements/:userId
