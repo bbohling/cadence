@@ -397,6 +397,30 @@ export async function getActivityDetail(
   );
 }
 
+/** Activity streams keyed by type (key_by_type=true). Absent keys = not recorded. */
+export interface StravaStreams {
+  time?: { data: number[] };
+  latlng?: { data: Array<[number, number]> };
+  altitude?: { data: number[] };
+  watts?: { data: Array<number | null> };
+  heartrate?: { data: Array<number | null> };
+}
+
+/**
+ * Fetch the per-sample streams for one activity — the full-resolution
+ * recording that track processing turns into tiles, power bests and climbs.
+ * Strava returns 404 for activities without a recording (manual entries).
+ */
+export async function getActivityStreams(
+  token: string,
+  activityId: number
+): Promise<StravaStreams> {
+  return stravaFetch<StravaStreams>(token, `/activities/${activityId}/streams`, {
+    keys: "time,latlng,altitude,watts,heartrate",
+    key_by_type: "true",
+  });
+}
+
 /**
  * Fetch the authenticated athlete's profile.
  */

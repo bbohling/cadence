@@ -22,6 +22,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260704.1",
+    "@garmin/fitsdk": "latest",
     "@types/bun": "latest",
     "@types/cron": "latest",
     "drizzle-kit": "latest",

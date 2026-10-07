@@ -53,7 +53,8 @@ no tables. `/health` returns 200 because it never touches the database, while
 every data route 500s with `Failed query: select ... from "users"`. Fix with
 `bun run db:local:setup` from the root, which resets the replica, imports
 `api/data/cadence-d1-dump.sql`, then replays the migrations taken after the dump
-was captured (currently `0002`, `0003`). Add new ones to `MIGRATIONS_AFTER_DUMP`
+was captured (currently `0002`, `0003`, `0004`), then imports `api/data/tracks/*.sql`
+if present (see Track data below). Add new ones to `MIGRATIONS_AFTER_DUMP`
 in `scripts/seed-local-d1.mjs`, or re-export the dump.
 
 ### UI (`cd ui`)
@@ -103,6 +104,12 @@ Scheduled work runs in the Worker's `scheduled()` handler (`api/src/index.ts`), 
 - **Bulk sync must never run against the deployed Worker** — free tier allows 50 subrequests/invocation; bulk sync is one request per activity. Backfill locally, then import to D1. When importing SQL dumps to D1, keep each statement under ~90 KB (see DEPLOY-CLOUDFLARE.md) and never use `sqlite3 .dump` (its `unistr()` output breaks D1).
 - Background work in request handlers must be registered with `c.executionCtx.waitUntil(...)` or Workers may cancel it after the response (see `routes/ensure-fresh.ts`).
 
+### Track data (full-resolution recordings)
+Tiles, power bests, climbs and route clusters come from per-sample recordings, processed by the pure code in `api/src/services/tracks/` (no DB/fetch — runs in both bun and workerd). Raw tracks are never stored; only derived rows, metric units.
+- **History:** `cd api && bun scripts/backfill-tracks.ts <unzipped Strava export>` → `api/data/tracks/tracks-NN.sql`, which rebuild the five track tables for the athlete. Apply in order with `wrangler d1 execute cadence --local|--remote --file`. Remote imports count against D1's 100k rows written/day.
+- **New rides:** `services/track-sync.ts` fetches Strava streams for rides with no `activity_tracks` row. The hourly cron does **one** ride, and only when the sync added nothing (10 ms CPU budget on the free plan). `POST /v1/sync/tracks/:userId?limit=N` drains a backlog.
+- Power samples > 1800 W are dropped; a ride with > 3% of pedaling samples over 1000 W is treated as a faulty meter and gets no power bests.
+
 ### Two Distinct KOM Datasets
 - **Historic KOMs** (`segment_efforts.kom_rank`): Frozen at sync time. Sourced from `segment_efforts` table.
 - **Current KOMs** (`segment_current_ranks`): Live leaderboard positions refreshed daily from Strava. Sourced from its own table.
@@ -112,6 +119,7 @@ Scheduled work runs in the Worker's `scheduled()` handler (`api/src/index.ts`), 
 - `activities`, `segment_efforts`, `gears` — normalized to imperial units (miles, feet, mph, °F); these are what all API endpoints read from
 - `segment_current_ranks` — current leaderboard positions, refreshed daily
 - `users`, `sync` — user records and sync state tracking
+- `activity_tracks`, `power_bests`, `climbs`, `climb_efforts`, `route_clusters` — track-derived data (see Track data)
 
 ### Drizzle ORM
 
