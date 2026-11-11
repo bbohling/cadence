@@ -62,7 +62,7 @@ for (const [port, name, varName] of [
     die(
       `${name} port ${port} is already in use by: ${owner}\n\n` +
         `  Stop it, or pick another port:  ${varName}=<port> bun run dev\n` +
-        `  Check ~/code/largemarge/bigMini/PORTS.md before choosing one.`
+        `  Check ~/code/stacks/PORTS.md before choosing one.`
     );
   }
 }
